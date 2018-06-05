@@ -23,7 +23,7 @@ import qualified Data.Text.Buildable
 import           Formatting (bprint, build, int, (%))
 import           Serokell.Util (allDistinct, listJson, pairF)
 
-import           Pos.Binary.Class (Bi)
+import           Pos.Binary.Class (Bi (..))
 import           Pos.Core.Slotting.Types (EpochIndex)
 import           Pos.Crypto (Hash, ProxySecretKey (..), ProxySignature,
                              ProtocolMagic, hash, validateProxySecretKey)
@@ -48,6 +48,10 @@ instance NFData LightDlgIndices
 instance Buildable LightDlgIndices where
     build (LightDlgIndices p) = bprint pairF p
 
+instance Bi LightDlgIndices where
+    encode = encode . getLightDlgIndices
+    decode = LightDlgIndices <$> decode
+
 -- | Light delegation proxy signature, that holds a pair of epoch
 -- indices.
 type ProxySigLight a = ProxySignature LightDlgIndices a
@@ -69,6 +73,10 @@ instance Hashable HeavyDlgIndex
 
 instance Buildable HeavyDlgIndex where
     build (HeavyDlgIndex i) = bprint build i
+
+instance Bi HeavyDlgIndex where
+    encode = encode . getHeavyDlgIndex
+    decode = HeavyDlgIndex <$> decode
 
 -- | Simple proxy signature without ttl/epoch index constraints.
 type ProxySigHeavy a = ProxySignature HeavyDlgIndex a
@@ -94,6 +102,10 @@ instance Buildable DlgPayload where
         bprint
             ("proxy signing keys ("%int%" items): "%listJson%"\n")
             (length psks) psks
+
+instance Bi DlgPayload where
+    encode = encode . getDlgPayload
+    decode = UnsafeDlgPayload <$> decode
 
 checkDlgPayload ::
        (MonadError Text m, Bi HeavyDlgIndex)

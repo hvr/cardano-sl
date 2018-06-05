@@ -8,11 +8,18 @@ module Pos.Core.Common.Fee
 
 import           Universum
 
+import qualified Data.ByteString.Lazy as LBS
 import           Data.Fixed (Fixed (..), Nano, showFixed)
 import           Data.Hashable (Hashable)
 import qualified Data.Text.Buildable as Buildable
 import           Formatting (bprint, build, shown, (%))
 import           Serokell.Data.Memory.Units (Byte, toBytes)
+
+import           Pos.Binary.Class (Bi (..), decodeKnownCborDataItem,
+                                   decodeUnknownCborDataItem, enforceSize,
+                                   encodeKnownCborDataItem,
+                                   encodeUnknownCborDataItem,
+                                   encodeListLen)
 
 -- | A fractional coefficient of fixed precision.
 newtype Coeff = Coeff Nano
@@ -20,6 +27,10 @@ newtype Coeff = Coeff Nano
 
 instance Buildable Coeff where
     build (Coeff x) = fromString (showFixed True x)
+
+instance Bi Coeff where
+    encode (Coeff n) = encode n
+    decode = Coeff <$> decode @Nano
 
 -- | A linear equation on the transaction size. Represents the @\s -> a + b*s@
 -- function where @s@ is the transaction size in bytes, @a@ and @b@ are
@@ -32,6 +43,14 @@ instance NFData TxSizeLinear
 instance Buildable TxSizeLinear where
     build (TxSizeLinear a b) =
         bprint (build%" + "%build%"*s") a b
+
+instance Bi TxSizeLinear where
+    encode (TxSizeLinear a b) = encodeListLen 2 <> encode a <> encode b
+    decode = do
+        enforceSize "TxSizeLinear" 2
+        !a <- decode @Coeff
+        !b <- decode @Coeff
+        return $ TxSizeLinear a b
 
 calculateTxSizeLinear :: TxSizeLinear -> Byte -> Nano
 calculateTxSizeLinear
@@ -69,6 +88,21 @@ instance Buildable TxFeePolicy where
         bprint ("policy(tx-size-linear): "%build) tsp
     build (TxFeePolicyUnknown v bs) =
         bprint ("policy(unknown:"%build%"): "%shown) v bs
+
+instance Bi TxFeePolicy where
+    encode policy = case policy of
+        TxFeePolicyTxSizeLinear txSizeLinear ->
+            encodeListLen 2 <> encode (0 :: Word8)
+                            <> encodeKnownCborDataItem txSizeLinear
+        TxFeePolicyUnknown word8 bs          ->
+            encodeListLen 2 <> encode word8
+                            <> encodeUnknownCborDataItem (LBS.fromStrict bs)
+    decode = do
+        enforceSize "TxFeePolicy" 2
+        tag <- decode @Word8
+        case tag of
+            0 -> TxFeePolicyTxSizeLinear <$> decodeKnownCborDataItem
+            _ -> TxFeePolicyUnknown tag  <$> decodeUnknownCborDataItem
 
 instance Hashable TxFeePolicy
 instance Hashable TxSizeLinear

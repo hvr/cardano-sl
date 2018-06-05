@@ -65,7 +65,7 @@ import           Serokell.Util (enumerate, listChunkedJson, pairBuilder)
 import           Serokell.Util.Base16 (formatBase16)
 import           System.Random (Random (..))
 
-import           Pos.Binary.Class (Bi, decode, encode)
+import           Pos.Binary.Class (Bi (..))
 import qualified Pos.Binary.Class as Bi
 import           Pos.Core.Constants (sharedSeedLength)
 import           Pos.Crypto.Hashing (AbstractHash)
@@ -365,6 +365,10 @@ newtype ChainDifficulty = ChainDifficulty
     { getChainDifficulty :: BlockCount
     } deriving (Show, Eq, Ord, Num, Enum, Real, Integral, Generic, Buildable, Typeable, NFData)
 
+instance Bi BlockCount where
+    encode = encode . getBlockCount
+    decode = BlockCount <$> decode
+
 ----------------------------------------------------------------------------
 -- SSC. It means shared seed computation, btw
 ----------------------------------------------------------------------------
@@ -421,6 +425,25 @@ instance Buildable Coin where
 instance Bounded Coin where
     minBound = Coin 0
     maxBound = Coin maxCoinVal
+
+-- | @'Bi'@ instance of @'Coin'@ type.
+-- number of total coins is 45*10^9 * 10^6
+--
+--  Input                        | Bits to represent |
+-- ------------------------------| ----------------- |
+-- 0-9                           |      8 bits       |
+-- 0-99                          |      16 bits      |
+-- 0-999                         |      24 bits      |
+-- 0-9999                        |      24 bits      |
+-- 0-99999                       |      40 bits      |
+-- 0-999999                      |      40 bits      |
+-- 45*10^15                      |      72 bits      |
+-- 45*10^9                       |      72 bits      |
+-- 45*10^9 * 10^6 (maxbound)     |      72 bits      |
+-- maxbound - 1                  |      72 bits      |
+instance Bi Coin where
+    encode = encode . unsafeGetCoin
+    decode = Coin <$> decode
 
 -- | Maximal possible value of 'Coin'.
 maxCoinVal :: Word64
@@ -542,4 +565,14 @@ Bi.deriveSimpleBi ''Script [
     Bi.Cons 'Script [
         Bi.Field [| scrVersion :: ScriptVersion |],
         Bi.Field [| scrScript  :: ByteString   |]
+    ]]
+
+Bi.deriveSimpleBi ''ChainDifficulty [
+    Bi.Cons 'ChainDifficulty [
+        Bi.Field [| getChainDifficulty :: BlockCount |]
+    ]]
+
+Bi.deriveSimpleBi ''SharedSeed [
+    Bi.Cons 'SharedSeed [
+        Bi.Field [| getSharedSeed :: ByteString |]
     ]]

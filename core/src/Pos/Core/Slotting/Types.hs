@@ -25,12 +25,17 @@ import qualified Data.Text.Buildable as Buildable
 import           Formatting (Format, bprint, build, int, ords, (%))
 import           System.Random (Random (..))
 
+import           Pos.Binary.Class (Bi (..), Field (..), Cons (..), deriveSimpleBi)
 import           Pos.Core.Slotting.Timestamp (TimeDiff (..), Timestamp (..))
 
 -- | Index of epoch.
 newtype EpochIndex = EpochIndex
     { getEpochIndex :: Word64
     } deriving (Show, Eq, Ord, Num, Enum, Ix, Integral, Real, Generic, Hashable, Bounded, Typeable, NFData)
+
+instance Bi EpochIndex where
+    encode (EpochIndex epoch) = encode epoch
+    decode = EpochIndex <$> decode
 
 instance Buildable EpochIndex where
     build = bprint ("#"%int)
@@ -51,6 +56,10 @@ data SlotId = SlotId
 instance Buildable SlotId where
     build SlotId {..} =
         bprint (ords%" slot of "%ords%" epoch") (getSlotIndex siSlot) siEpoch
+
+instance Bi LocalSlotIndex where
+    encode = encode . getSlotIndex
+    decode = UnsafeLocalSlotIndex <$> decode
 
 -- | Specialized formatter for 'SlotId'.
 slotIdF :: Format r (SlotId -> r)
@@ -79,6 +88,10 @@ instance Ord EpochOrSlot where
 instance Buildable EpochOrSlot where
     build = either Buildable.build Buildable.build . unEpochOrSlot
 
+instance Bi EpochOrSlot where
+    encode (EpochOrSlot e) = encode e
+    decode = EpochOrSlot <$> decode @(Either EpochIndex SlotId)
+
 instance NFData SlotId
 
 flip makeLensesFor ''SlotId [
@@ -88,3 +101,13 @@ flip makeLensesFor ''SlotId [
 newtype SlotCount = SlotCount {getSlotCount :: Word64}
     deriving (Eq, Ord, Num, Real, Integral, Enum, Read, Show,
               Buildable, Generic, Typeable, NFData, Hashable, Random)
+
+instance Bi SlotCount where
+    encode = encode . getSlotCount
+    decode = SlotCount <$> decode
+
+deriveSimpleBi ''SlotId [
+    Cons 'SlotId [
+        Field [| siEpoch :: EpochIndex     |],
+        Field [| siSlot  :: LocalSlotIndex |]
+    ]]

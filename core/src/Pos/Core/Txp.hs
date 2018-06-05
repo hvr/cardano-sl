@@ -47,6 +47,7 @@ import           Universum
 
 import           Control.Monad.Except (MonadError(throwError))
 import           Control.Lens (makeLenses, makePrisms)
+import qualified Data.ByteString.Lazy as BSL
 import           Data.Hashable (Hashable)
 import qualified Data.Text.Buildable as Buildable
 import           Data.Vector (Vector)
@@ -56,7 +57,11 @@ import           Serokell.Util.Base16 (base16F)
 import           Serokell.Util.Text (listJson, listJsonIndent)
 import           Serokell.Util.Verify (VerificationRes (..), verResSingleF, verifyGeneric)
 
-import           Pos.Binary.Class (Bi)
+import           Pos.Binary.Class (Bi (..), Cons (..), Field (..), decodeKnownCborDataItem,
+                                   decodeListLenCanonical, decodeUnknownCborDataItem,
+                                   deriveSimpleBi, encodeKnownCborDataItem, encodeListLen,
+                                   encodeUnknownCborDataItem, enforceSize, matchSize)
+import           Pos.Binary.Merkle ()
 import           Pos.Binary.Core.Address ()
 import           Pos.Binary.Crypto ()
 import           Pos.Core.Common (Address (..), Coin (..), Script, addressHash, coinF, checkCoin)
@@ -331,3 +336,102 @@ type TxpUndo = [TxUndo]
 ----------------------------------------------------------------------------
 
 makePrisms ''TxOut
+
+-- | Bi Instances
+
+instance Bi TxSigData where
+    encode (TxSigData {..}) = encode txSigTxHash
+    decode = TxSigData <$> decode
+
+instance Bi TxInWitness where
+    encode input = case input of
+        PkWitness key sig         ->
+            encodeListLen 2 <>
+            encode (0 :: Word8) <>
+            encodeKnownCborDataItem (key, sig)
+        ScriptWitness val red     ->
+            encodeListLen 2 <>
+            encode (1 :: Word8) <>
+            encodeKnownCborDataItem (val, red)
+        RedeemWitness key sig     ->
+            encodeListLen 2 <>
+            encode (2 :: Word8) <>
+            encodeKnownCborDataItem (key, sig)
+        UnknownWitnessType tag bs ->
+            encodeListLen 2 <>
+            encode tag <>
+            encodeUnknownCborDataItem (BSL.fromStrict bs)
+    decode = do
+        len <- decodeListLenCanonical
+        tag <- decode @Word8
+        case tag of
+            0 -> do
+                matchSize len "TxInWitness.PkWitness" 2
+                uncurry PkWitness <$> decodeKnownCborDataItem
+            1 -> do
+                matchSize len "TxInWitness.ScriptWitness" 2
+                uncurry ScriptWitness <$> decodeKnownCborDataItem
+            2 -> do
+                matchSize len "TxInWitness.RedeemWitness" 2
+                uncurry RedeemWitness <$> decodeKnownCborDataItem
+            _ -> do
+                matchSize len "TxInWitness.UnknownWitnessType" 2
+                UnknownWitnessType tag <$> decodeUnknownCborDataItem
+
+instance Bi TxIn where
+    encode TxInUtxo{..} =
+        encodeListLen 2 <>
+        encode (0 :: Word8) <>
+        encodeKnownCborDataItem (txInHash, txInIndex)
+    encode (TxInUnknown tag bs) =
+        encodeListLen 2 <>
+        encode tag <>
+        encodeUnknownCborDataItem (BSL.fromStrict bs)
+    decode = do
+        enforceSize "TxIn" 2
+        tag <- decode @Word8
+        case tag of
+            0 -> uncurry TxInUtxo <$> decodeKnownCborDataItem
+            _ -> TxInUnknown tag  <$> decodeUnknownCborDataItem
+
+deriveSimpleBi ''TxOut [
+    Cons 'TxOut [
+        Field [| txOutAddress :: Address |],
+        Field [| txOutValue   :: Coin    |]
+    ]]
+
+deriveSimpleBi ''TxOutAux [
+    Cons 'TxOutAux [
+        Field [| toaOut :: TxOut |]
+    ]]
+
+instance Bi Tx where
+    encode tx = encodeListLen 3
+                <> encode (_txInputs tx)
+                <> encode (_txOutputs tx)
+                <> encode (_txAttributes tx)
+    decode = do
+        enforceSize "Tx" 3
+        UnsafeTx <$> decode <*> decode <*> decode
+
+deriveSimpleBi ''TxAux [
+    Cons 'TxAux [
+        Field [| taTx       :: Tx        |],
+        Field [| taWitness  :: TxWitness |]
+    ]]
+
+instance Bi TxProof where
+    encode proof =  encodeListLen 3
+                 <> encode (txpNumber proof)
+                 <> encode (txpRoot proof)
+                 <> encode (txpWitnessesHash proof)
+    decode = do
+        enforceSize "TxProof" 3
+        TxProof <$> decode <*>
+                    decode <*>
+                    decode
+
+instance Bi TxPayload where
+    encode UnsafeTxPayload {..} = encode $ zip (toList _txpTxs) _txpWitnesses
+    decode = mkTxPayload <$> decode
+

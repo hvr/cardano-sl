@@ -62,16 +62,7 @@ library
   other-modules:
                        -- Binary
                        Pos.Binary.Core.Address
-                       Pos.Binary.Core.Block
-                       Pos.Binary.Core.Blockchain
-                       Pos.Binary.Core.Common
-                       Pos.Binary.Core.Delegation
-                       Pos.Binary.Core.Fee
                        Pos.Binary.Core.Script
-                       Pos.Binary.Core.Slotting
-                       Pos.Binary.Core.Ssc
-                       Pos.Binary.Core.Txp
-                       Pos.Binary.Core.Update
 
                        -- Block
                        Pos.Core.Block.Genesis.Lens
@@ -178,6 +169,7 @@ library
                        MultiParamTypeClasses
                        FunctionalDependencies
                        DefaultSignatures
+                       InstanceSigs
                        NoImplicitPrelude
                        OverloadedStrings
                        RankNTypes
