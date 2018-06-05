@@ -28,6 +28,7 @@ module Pos.Crypto.Hashing
        , hash
        , hashRaw
        , hashRaw'
+       , unsafeHashRaw'
        , unsafeHash
        , unsafeCheatingHashCoerce
 
@@ -169,6 +170,9 @@ hashRaw = AbstractHash . Hash.hashlazy
 
 hashRaw' :: ByteString -> Hash Raw
 hashRaw' = AbstractHash . Hash.hash
+
+unsafeHashRaw' :: Proxy a -> ByteString -> Hash a
+unsafeHashRaw' _ = AbstractHash . Hash.hash
 
 -- | Encode thing as 'Bi' data and then wrap into constructor.
 unsafeHash :: Bi a => a -> Hash b

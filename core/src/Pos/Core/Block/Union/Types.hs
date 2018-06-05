@@ -10,6 +10,7 @@ module Pos.Core.Block.Union.Types
        ( BlockHeader (BlockHeaderGenesis, BlockHeaderMain)
        , _BlockHeaderGenesis
        , _BlockHeaderMain
+       , eitherBlockHeader
        , choosingBlockHeader
        , Block
 
@@ -55,7 +56,9 @@ import qualified Data.Text.Lazy.Builder as Builder
 import           Formatting (Format, bprint, build, fitLeft, later, (%), (%.))
 import           Universum
 
-import           Pos.Binary.Class (Bi (..), DecoderAttrKind (..), 
+import           Pos.Binary.Class (Bi (..), BiExtRep, DecoderAttr (..),
+                                   DecoderAttrKind (..), decodeWithOffsets,
+                                   spliceExtRep, forgetExtRep,
                                    decodeListLenCanonicalOf, encodeListLen,
                                    enforceSize)
 import           Pos.Binary.Crypto ()
@@ -69,7 +72,7 @@ import           Pos.Core.Slotting.Types (SlotId (..))
 import           Pos.Core.Ssc (mkSscProof)
 import           Pos.Core.Txp (mkTxProof)
 import           Pos.Core.Update.Types (mkUpdateProof)
-import           Pos.Crypto (AbstractHash (..), Hash, ProtocolMagic, PublicKey, Signature, hash)
+import           Pos.Crypto (AbstractHash (..), Hash, ProtocolMagic, PublicKey, Signature, hash, unsafeHashRaw')
 import           Pos.Util.Some (Some, applySome, liftLensSome)
 import           Pos.Util.Util (cborError, toCborError)
 import           Unsafe.Coerce (unsafeCoerce)
@@ -253,6 +256,14 @@ instance
     rnf (BlockHeaderGenesis header) = rnf header
     rnf (BlockHeaderMain header) = rnf header
 
+eitherBlockHeader
+    :: (GenesisBlockHeader attr -> a)
+    -> (MainBlockHeader attr -> a)
+    -> BlockHeader attr
+    -> a
+eitherBlockHeader f _ (BlockHeaderGenesis h) = f h
+eitherBlockHeader _ f (BlockHeaderMain h)    = f h
+
 choosingBlockHeader :: Functor f =>
        LensLike' f (GenesisBlockHeader attr) r
     -> LensLike' f (MainBlockHeader attr) r
@@ -275,6 +286,19 @@ instance Bi (BlockHeader 'AttrNone) where
            0 -> BlockHeaderGenesis <$!> decode
            1 -> BlockHeaderMain <$!> decode
            _ -> cborError $ "decode@BlockHeader: unknown tag " <> pretty t
+
+instance BiExtRep BlockHeader where
+    decodeWithOffsets = do
+        decodeListLenCanonicalOf 2
+        t <- decodeWordCanonical
+        case t of
+            0 -> BlockHeaderGenesis <$!> decodeWithOffsets
+            1 -> BlockHeaderMain <$!> decodeWithOffsets
+            _ -> cborError $ "decode@BlockHeader: unknown tag " <> pretty t
+    spliceExtRep bs (BlockHeaderGenesis h) = BlockHeaderGenesis $ spliceExtRep bs h
+    spliceExtRep bs (BlockHeaderMain h)    = BlockHeaderMain $ spliceExtRep bs h
+    forgetExtRep (BlockHeaderGenesis h) = BlockHeaderGenesis $ forgetExtRep h
+    forgetExtRep (BlockHeaderMain h)    = BlockHeaderMain $ forgetExtRep h
 
 -- | Block.
 type Block (attr :: DecoderAttrKind) = Either (GenesisBlock attr) (MainBlock attr)
@@ -338,13 +362,20 @@ instance HasHeaderHash (Some HasHeaderHash) where
 headerHashG :: HasHeaderHash a => Getter a HeaderHash
 headerHashG = to headerHash
 
--- | This function is required because type inference fails in attempts to
--- hash only @Right@ or @Left@.
---
--- Perhaps, it shouldn't be here, but I decided not to create a module
--- for only this function.
-blockHeaderHash :: forall attr. Bi (BlockHeader attr) => BlockHeader attr -> HeaderHash
-blockHeaderHash = anyHeaderHash . hash
+-- |
+-- Efficient way of computing header hash if external @'ByteString'@
+-- representation is present.
+blockHeaderHash :: BlockHeader attr -> HeaderHash
+blockHeaderHash bh =
+    case eitherBlockHeader _gbhDecoderAttr _gbhDecoderAttr bh of
+        DecoderAttrNone
+            -> anyHeaderHash $ hash $ bh
+        DecoderAttrOffsets _ _
+            -> anyHeaderHash $ hash $ forgetExtRep $ bh
+        DecoderAttrExtRep bs
+            -> anyHeaderHash $ unsafeHashRaw'
+                (Proxy :: Proxy (BlockHeader 'AttrExtRep))
+                bs
 
 -- HasPrevBlock
 -- | Class for something that has previous block (lens to 'Hash' for this block).
