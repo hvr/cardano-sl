@@ -47,7 +47,7 @@ import           Pos.Util.Chrono (NE, OldestFirst (..))
 -- optimized by traversing from older to newer.
 lcaWithMainChain
     :: ( MonadBlockDBRead m )
-    => OldestFirst NE BlockHeader -> m (Maybe HeaderHash)
+    => OldestFirst NE (BlockHeader attr) -> m (Maybe HeaderHash)
 lcaWithMainChain headers =
     lcaProceed Nothing $
     oldestParent <| fmap headerHash (getOldestFirst headers)
@@ -66,12 +66,12 @@ lcaWithMainChain headers =
 -- consistency/locking control in view so I guess you don't get any
 -- consistency. FIXME.
 lcaWithMainChainSuffix
-    :: forall m .
+    :: forall m attr.
        (MonadBlockDBRead m)
-    => OldestFirst [] BlockHeader -> m (OldestFirst [] BlockHeader)
+    => OldestFirst [] (BlockHeader attr) -> m (OldestFirst [] (BlockHeader attr))
 lcaWithMainChainSuffix headers = OldestFirst <$> go (getOldestFirst headers)
   where
-    go :: [BlockHeader] -> m [BlockHeader]
+    go :: [(BlockHeader attr)] -> m [(BlockHeader attr)]
     go [] = pure []
     go (bh:rest) = do
         inMain <- isBlockInMainChain (headerHash bh)

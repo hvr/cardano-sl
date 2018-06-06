@@ -39,7 +39,7 @@ import           Pos.Block.Types (Blund, LastKnownHeaderTag)
 import           Pos.Communication.Protocol (NodeId)
 import           Pos.Core (HasHeaderHash (..), HeaderHash, gbHeader, headerHashG, isMoreDifficult,
                            prevBlockL)
-import           Pos.Core.Block (Block, BlockHeader, blockHeader)
+import           Pos.Core.Block (Block, BlockHeader, blockHeader, shortHeaderHashF)
 import           Pos.Crypto (shortHashF)
 import qualified Pos.DB.Block.Load as DB
 import           Pos.Diffusion.Types (Diffusion)
@@ -147,19 +147,19 @@ handleUnsolicitedHeader header nodeId = do
             addHeaderToBlockRequestQueue nodeId header False
         CHUseless reason -> logDebug $ sformat uselessFormat hHash reason
         CHInvalid _ -> do
-            logWarning $ sformat ("handleUnsolicited: header "%shortHashF%
+            logWarning $ sformat ("handleUnsolicited: header "%shortHeaderHashF%
                                 " is invalid") hHash
             pass -- TODO: ban node for sending invalid block.
   where
     hHash = headerHash header
     continuesFormat =
-        "Header " %shortHashF %
+        "Header " %shortHeaderHashF %
         " is a good continuation of our chain, will process"
     alternativeFormat =
-        "Header " %shortHashF %
+        "Header " %shortHeaderHashF %
         " potentially represents good alternative chain, will process"
     uselessFormat =
-        "Header " %shortHashF % " is useless for the following reason: " %stext
+        "Header " %shortHeaderHashF % " is useless for the following reason: " %stext
 
 ----------------------------------------------------------------------------
 -- Putting things into request queue
@@ -176,7 +176,7 @@ addHeaderToBlockRequestQueue
     -> m ()
 addHeaderToBlockRequestQueue nodeId header continues = do
     let hHash = headerHash header
-    logDebug $ sformat ("addToBlockRequestQueue, : "%shortHashF) hHash
+    logDebug $ sformat ("addToBlockRequestQueue, : "%shortHeaderHashF) hHash
     queue <- view (lensOf @BlockRetrievalQueueTag)
     lastKnownH <- view (lensOf @LastKnownHeaderTag)
     added <- atomically $ do
@@ -203,7 +203,7 @@ addTaskToBlockRequestQueue nodeId queue task = do
 
 updateLastKnownHeader
     :: TVar (Maybe BlockHeader)
-    -> BlockHeader
+    -> BlockHeader attr
     -> STM ()
 updateLastKnownHeader lastKnownH header = do
     oldV <- readTVar lastKnownH
@@ -220,7 +220,7 @@ handleBlocks
        ( BlockWorkMode ctx m
        , HasMisbehaviorMetrics ctx
        )
-    => OldestFirst NE Block
+    => OldestFirst NE (Block attr)
     -> Diffusion m
     -> m ()
 handleBlocks blocks diffusion = do
@@ -251,7 +251,7 @@ applyWithoutRollback
        , HasMisbehaviorMetrics ctx
        )
     => Diffusion m
-    -> OldestFirst NE Block
+    -> OldestFirst NE (Block attr)
     -> m ()
 applyWithoutRollback diffusion blocks = do
     logInfo . sformat ("Trying to apply blocks w/o rollback. " % multilineBounds 6)
@@ -335,7 +335,7 @@ applyWithRollback diffusion toApply lca toRollback = do
 relayBlock
     :: forall ctx m.
        (BlockWorkMode ctx m)
-    => Diffusion m -> Block -> m ()
+    => Diffusion m -> Block attr -> m ()
 relayBlock _ (Left _)                  = logDebug "Not relaying Genesis block"
 relayBlock diffusion (Right mainBlk) = do
     recoveryInProgress >>= \case
@@ -353,7 +353,7 @@ relayBlock diffusion (Right mainBlk) = do
 onFailedVerifyBlocks
     :: forall ctx m.
        (BlockWorkMode ctx m)
-    => NonEmpty Block -> Text -> m ()
+    => NonEmpty (Block attr) -> Text -> m ()
 onFailedVerifyBlocks blocks err = do
     logWarning $ sformat ("Failed to verify blocks: "%stext%"\n  blocks = "%listJson)
         err (fmap headerHash blocks)

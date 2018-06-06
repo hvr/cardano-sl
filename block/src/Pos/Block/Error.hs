@@ -16,8 +16,7 @@ import           Data.Text.Lazy.Builder (Builder, fromText)
 import           Formatting (bprint, stext, (%))
 import           GHC.Generics (Generic)
 
-import           Pos.Core (HeaderHash)
-import           Pos.Crypto (shortHashF)
+import           Pos.Core (HeaderHash, shortHeaderHashF)
 
 
 -- | This function can be used to create a message when tip mismatch
@@ -27,7 +26,7 @@ tipMismatchMsg :: Text -> HeaderHash -> HeaderHash -> Builder
 tipMismatchMsg action storedTip attemptedTip =
     bprint
         ("Can't "%stext%" block because of tip mismatch (stored is "
-         %shortHashF%", attempted is "%shortHashF%")")
+         %shortHeaderHashF%", attempted is "%shortHeaderHashF%")")
         action storedTip attemptedTip
 
 data RollbackException = RollbackTipMismatch HeaderHash HeaderHash

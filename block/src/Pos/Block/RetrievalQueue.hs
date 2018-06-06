@@ -9,14 +9,16 @@ import           Universum
 
 import           Control.Concurrent.STM (TBQueue)
 
+import           Pos.Binary.Class (DecoderAttrKind (AttrExtRep))
 import           Pos.Core.Block (BlockHeader)
 import           Pos.Network.Types (NodeId)
 
 -- | Task that is put in the block retrieval queue for the retrieval
 -- worker to perform.
 data BlockRetrievalTask = BlockRetrievalTask
-    { brtHeader    :: !BlockHeader
-      -- ^ Header we're insterested in.
+    { brtHeader    :: !(BlockHeader 'AttrExtRep)
+      -- ^ Header we're insterested in together with external, i.e.
+      -- @'ByteString'@ representations.
     , brtContinues :: !Bool
       -- ^ If it was tentatively classified as "direct continuation of
       -- our chain".
@@ -25,4 +27,4 @@ data BlockRetrievalTask = BlockRetrievalTask
 data BlockRetrievalQueueTag
 
 -- | Queue types.
-type BlockRetrievalQueue = TBQueue (NodeId, BlockRetrievalTask)
+type BlockRetrievalQueue attr = TBQueue (NodeId, BlockRetrievalTask)

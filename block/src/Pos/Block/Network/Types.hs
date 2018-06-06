@@ -61,13 +61,13 @@ instance Buildable MsgGetBlocks where
                mgbFrom mgbTo
 
 -- | 'Headers' message (see protocol specification).
-data MsgHeaders
-    = MsgHeaders (NewestFirst NE BlockHeader)
+data MsgHeaders attr
+    = MsgHeaders (NewestFirst NE (BlockHeader attr))
     | MsgNoHeaders Text
     deriving (Eq, Show, Generic)
 
 -- | 'Block' message (see protocol specification).
-data MsgBlock
-    = MsgBlock Block
+data MsgBlock attr
+    = MsgBlock (Block attr)
     | MsgNoBlock Text
     deriving (Eq, Show, Generic)

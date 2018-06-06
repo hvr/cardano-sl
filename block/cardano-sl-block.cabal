@@ -114,6 +114,7 @@ library
 
   default-extensions:   DeriveDataTypeable
                         DeriveGeneric
+                        DataKinds
                         GeneralizedNewtypeDeriving
                         StandaloneDeriving
                         FlexibleContexts

@@ -41,7 +41,7 @@ data Undo = Undo
 instance NFData Undo
 
 -- | Block and its Undo.
-type Blund = (Block, Undo)
+type Blund attr = (Block attr, Undo)
 
 instance HasConfiguration => Buildable Undo where
     build Undo{..} =
@@ -52,20 +52,20 @@ instance HasConfiguration => Buildable Undo where
                 "  undoSlog: "%build)
                (map (bprint listJson) undoTx) undoDlg undoUS undoSlog
 
-instance HasDifficulty Blund where
+instance HasDifficulty (Blund attr) where
     difficultyL = _1 . difficultyL
 
-instance HasHeaderHash Block => HasHeaderHash Blund where
+instance HasHeaderHash (Block attr) => HasHeaderHash (Blund attr) where
     headerHash = headerHash . fst
 
 -- | For a description of what these types mean,
 -- please refer to @NodeContext@ in @Pos.Context.Context@.
 data LastKnownHeaderTag
-type LastKnownHeader = TVar (Maybe BlockHeader)
-type MonadLastKnownHeader ctx m
-     = (MonadReader ctx m, HasLens LastKnownHeaderTag ctx LastKnownHeader)
+type LastKnownHeader attr = TVar (Maybe (BlockHeader attr))
+type MonadLastKnownHeader attr ctx m
+     = (MonadReader ctx m, HasLens LastKnownHeaderTag ctx (LastKnownHeader attr))
 
 data RecoveryHeaderTag
-type RecoveryHeader = STM.TMVar (NodeId, BlockHeader)
-type MonadRecoveryHeader ctx m
-     = (MonadReader ctx m, HasLens RecoveryHeaderTag ctx RecoveryHeader)
+type RecoveryHeader attr = STM.TMVar (NodeId, BlockHeader attr)
+type MonadRecoveryHeader attr ctx m
+     = (MonadReader ctx m, HasLens RecoveryHeaderTag ctx (RecoveryHeader attr))
