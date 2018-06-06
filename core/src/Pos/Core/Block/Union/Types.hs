@@ -1,5 +1,6 @@
-{-# LANGUAGE DataKinds          #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DataKinds           #-}
+{-# LANGUAGE StandaloneDeriving  #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 -- the Getter instances
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
@@ -358,6 +359,9 @@ instance HasHeaderHash HeaderHash where
 
 instance HasHeaderHash (Some HasHeaderHash) where
     headerHash = applySome headerHash
+
+instance HasHeaderHash (Hash (BlockHeader attr)) where
+    headerHash = anyHeaderHash
 
 headerHashG :: HasHeaderHash a => Getter a HeaderHash
 headerHashG = to headerHash
