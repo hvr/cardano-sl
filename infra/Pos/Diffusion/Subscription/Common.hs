@@ -37,6 +37,7 @@ import           System.Clock (Clock (Monotonic), TimeSpec, getTime, toNanoSecs)
 import           System.Wlog (Severity (..))
 
 import           Pos.Binary.Class (Bi)
+import           Pos.Communication.BiP (biSerIO)
 import           Pos.Communication.Listener (listenerConv)
 import           Pos.Communication.Protocol (Conversation (..), ConversationActions (..),
                                              ListenerSpec, MkListeners, MsgSubscribe (..),
@@ -137,8 +138,8 @@ networkSubscribeTo before middle keepalive after sendActions peer = mask $ \rest
             withConnectionTo sendActions peer $ \_peerData -> NE.fromList
                 -- Sort conversations in descending order based on their version so that
                 -- the highest available version of the conversation is picked.
-                [ Conversation (convMsgSubscribe (middle peer) (keepalive peer))
-                , Conversation (convMsgSubscribe1 (middle peer))
+                [ Conversation biSerIO biSerIO (convMsgSubscribe (middle peer) (keepalive peer))
+                , Conversation biSerIO biSerIO (convMsgSubscribe1 (middle peer))
                 ]
     outcome <- Safe.try (restore networkAction)
     timeEnded <- getTime Monotonic

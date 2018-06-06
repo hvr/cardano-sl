@@ -43,10 +43,10 @@ import           Pos.Core (BlockVersion (..), Coin, EpochIndex, HeaderHash, HasP
                            IsMainHeader (..), SlotId, SoftforkRule (..), TimeDiff (..), addressHash,
                            applyCoinPortionUp, coinPortionDenominator, coinToInteger, difficultyL,
                            epochSlots, getCoinPortion, headerHashG, isBootstrapEra, CoinPortion (..),
-                           sumCoins, unsafeAddCoin, unsafeIntegerToCoin, unsafeSubCoin)
+                           sumCoins, unsafeAddCoin, unsafeIntegerToCoin, unsafeSubCoin, shortHeaderHashF)
 import           Pos.Core.Update (BlockVersionData (..), BlockVersionModifier (..), UpId,
                                   UpdateProposal (..), UpdateVote (..))
-import           Pos.Crypto (PublicKey, hash, shortHashF)
+import           Pos.Crypto (PublicKey, hash)
 import           Pos.Slotting.Types (EpochSlottingData (..), SlottingData, addEpochSlottingData,
                                      getCurrentEpochIndex, getNextEpochSlottingData)
 import           Pos.Update.Poll.Class (MonadPoll (..), MonadPollRead (..))
@@ -187,7 +187,7 @@ adoptBlockVersion winningBlk bv = do
     processConfirmed cps
         | cpsBlockVersion cps /= bv = pass
         | otherwise = addConfirmedProposal cps {cpsAdopted = Just winningBlk}
-    logFmt = "BlockVersion is adopted: "%build%"; winning block was "%shortHashF
+    logFmt = "BlockVersion is adopted: "%build%"; winning block was "%shortHeaderHashF
 
 -- | Update slotting data stored in poll. First argument is epoch for
 -- which currently adopted 'BlockVersion' can be applied. Here we update the

@@ -112,7 +112,7 @@ dlgLastPsk i = reach (Nothing, i)
 -- | Verifies a header from delegation perspective (signature checks).
 dlgVerifyHeader ::
        (MonadCedeRead m)
-    => MainBlockHeader
+    => MainBlockHeader attr
     -> m (Either Text ())
 dlgVerifyHeader h = runExceptT $ do
     let leader = h ^. mainHeaderLeaderKey

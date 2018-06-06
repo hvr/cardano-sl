@@ -34,9 +34,9 @@ import           UnliftIO (MonadUnliftIO)
 
 import           Pos.Binary.Class (biSize)
 import           Pos.Core (BlockVersionData (bvdMaxBlockSize), HeaderHash,
-                           SlotId (..), slotIdF)
+                           SlotId (..), slotIdF, shortHeaderHashF)
 import           Pos.Core.Update (UpId, UpdatePayload (..), UpdateProposal, UpdateVote (..))
-import           Pos.Crypto (PublicKey, shortHashF)
+import           Pos.Crypto (PublicKey)
 import           Pos.DB.Class (MonadDBRead)
 import qualified Pos.DB.GState.Common as DB
 import           Pos.Lrc.Context (HasLrcContext)
@@ -374,8 +374,8 @@ usPreparePayload neededTip slotId@SlotId{..} = do
                        slotIdF%", but requested one is "%slotIdF%")"
     tipMismatchFmt =  "US payload can't be created due to tip mismatch "
                      %"(our payload is for "
-                     %shortHashF%", but we want to create payload based on tip "
-                     %shortHashF%")"
+                     %shortHeaderHashF%", but we want to create payload based on tip "
+                     %shortHeaderHashF%")"
 
 -- Here we basically choose only one proposal for inclusion and remove
 -- all votes for other proposals.
