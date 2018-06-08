@@ -18,6 +18,7 @@ module Pos.Binary.Class.Core
     , ByteOffset
     , DecoderAttrKind (..)
     , DecoderAttr(..)
+    , decoderAttrSize
     -- * CBOR re-exports
     , E.encodeListLen
     , D.decodeListLenCanonical
@@ -111,6 +112,9 @@ data DecoderAttr (attr :: DecoderAttrKind) where
   DecoderAttrNone    ::                             DecoderAttr 'AttrNone
   DecoderAttrOffsets :: ByteOffset -> ByteOffset -> DecoderAttr 'AttrOffsets
   DecoderAttrExtRep  :: ByteString ->               DecoderAttr 'AttrExtRep
+
+decoderAttrSize :: DecoderAttr 'AttrExtRep -> Byte
+decoderAttrSize (DecoderAttrExtRep bs) = fromIntegral $ BS.length bs
 
 instance Buildable (DecoderAttr 'AttrNone) where
     build DecoderAttrNone = Builder.fromText "DecoderAttrNone"
