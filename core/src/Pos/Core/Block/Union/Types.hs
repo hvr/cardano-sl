@@ -13,7 +13,9 @@ module Pos.Core.Block.Union.Types
        , _BlockHeaderMain
        , eitherBlockHeader
        , choosingBlockHeader
+       , blockHeaderDecoderAttr
        , Block
+       , blockDecoderAttr
 
        -- * GenesisBlockchain
        , GenesisBlockchain
@@ -211,8 +213,7 @@ instance Bi MainConsensusData where
                                  decode <*>
                                  decode
 
-instance ( Bi (BlockHeader attr)
-         , Bi MainProof) =>
+instance ( Bi MainProof ) =>
          Blockchain MainBlockchain attr where
 
     type BodyProof MainBlockchain = MainProof
@@ -273,6 +274,9 @@ choosingBlockHeader onGenesis onMain f = \case
     BlockHeaderGenesis bh -> BlockHeaderGenesis <$> onGenesis f bh
     BlockHeaderMain bh -> BlockHeaderMain <$> onMain f bh
 
+blockHeaderDecoderAttr :: BlockHeader attr -> DecoderAttr attr
+blockHeaderDecoderAttr = eitherBlockHeader _gbhDecoderAttr _gbhDecoderAttr
+
 instance Bi (BlockHeader 'AttrNone) where
    encode x = encodeListLen 2 <> encodeWord tag <> body
      where
@@ -303,6 +307,9 @@ instance BiExtRep BlockHeader where
 
 -- | Block.
 type Block (attr :: DecoderAttrKind) = Either (GenesisBlock attr) (MainBlock attr)
+
+blockDecoderAttr :: Block attr -> DecoderAttr attr
+blockDecoderAttr = either _gbDecoderAttr _gbDecoderAttr
 
 ----------------------------------------------------------------------------
 -- HeaderHash
