@@ -11,6 +11,7 @@ import           Test.QuickCheck (arbitrary)
 import qualified Test.QuickCheck.Gen as QC
 import qualified Test.QuickCheck.Random as QC
 
+import           Pos.Binary.Class (DecoderAttrKind (..))
 import           Pos.Core (MainBlock, HasProtocolConstants, HasProtocolMagic,
                            HasGenesisHash, ProtocolConstants, ProtocolMagic)
 -- Also brings in the 'Arbitrary' instance for 'MainBlock'.
@@ -25,7 +26,7 @@ generateMainBlockWithConfiguration
        )
     => Int -- ^ Seed for random generator.
     -> Int -- ^ Size of the generated value (see QuickCheck docs).
-    -> MainBlock
+    -> MainBlock 'AttrNone
 generateMainBlockWithConfiguration genSeed = QC.unGen arbitrary qcGen
   where
     qcGen = QC.mkQCGen genSeed
@@ -38,7 +39,7 @@ generateMainBlock
     -> ProtocolConstants
     -> Int
     -> Int
-    -> MainBlock
+    -> MainBlock 'AttrNone
 generateMainBlock pm pc genSeed = QC.unGen generator qcGen
   where
     qcGen = QC.mkQCGen genSeed

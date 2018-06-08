@@ -11,6 +11,7 @@ import           Pos.Arbitrary.Block ()
 import           Pos.Arbitrary.Ssc (SscPayloadDependsOnSlot (..))
 import           Pos.Arbitrary.Update ()
 import qualified Pos.Block.Network.Types as T
+import           Pos.Binary.Class (DecoderAttrKind (..))
 import           Pos.Core (HasGenesisHash, HasProtocolConstants, HasProtocolMagic)
 import           Pos.Core.Ssc (SscPayload)
 
@@ -32,7 +33,7 @@ instance Arbitrary T.MsgGetBlocks where
 instance ( HasProtocolConstants
          , HasProtocolMagic
          ) =>
-         Arbitrary T.MsgHeaders where
+         Arbitrary (T.MsgHeaders 'AttrNone) where
     arbitrary = genericArbitrary
     shrink = genericShrink
 
@@ -42,6 +43,6 @@ instance ( Arbitrary SscPayload
          , HasProtocolMagic
          , HasGenesisHash
          ) =>
-         Arbitrary T.MsgBlock where
+         Arbitrary (T.MsgBlock 'AttrNone) where
     arbitrary = genericArbitrary
     shrink = genericShrink

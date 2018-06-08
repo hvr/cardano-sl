@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds  #-}
+{-# LANGUAGE RankNTypes #-}
 -- | Useful functions for serialization/deserialization.
 
 module Pos.Binary.Class.Primitive
@@ -7,7 +9,9 @@ module Pos.Binary.Class.Primitive
        , serializeBuilder
        -- * Deserialize inside the Decoder monad
        , deserialize
+       , deserializeWithExtRep
        , deserialize'
+       , deserializeWithExtRep'
        -- * Unsafe deserialization
        , unsafeDeserialize
        , unsafeDeserialize'
@@ -52,7 +56,7 @@ import           Data.Typeable (typeOf)
 import           Formatting (sformat, shown, (%))
 import           Serokell.Data.Memory.Units (Byte)
 
-import           Pos.Binary.Class.Core (Bi (..), cborError, enforceSize, toCborError)
+import           Pos.Binary.Class.Core (Bi (..), BiExtRep (..), DecoderAttrKind (..), cborError, enforceSize, toCborError)
 
 -- | Serialize a Haskell value to an external binary representation.
 --
@@ -89,7 +93,7 @@ serializeWith firstChunk nextChunk = Builder.toLazyByteStringWith strategy mempt
 -- representation is invalid or does not correspond to a value of the
 -- expected type.
 unsafeDeserialize :: Bi a => BSL.ByteString -> a
-unsafeDeserialize = either impureThrow identity . bimap fst fst . deserializeOrFail
+unsafeDeserialize = either impureThrow identity . bimap fst fst . deserializeOrFail decode
 
 -- | Strict variant of 'deserialize'.
 unsafeDeserialize' :: Bi a => BS.ByteString -> a
@@ -101,39 +105,58 @@ unsafeDeserialize' = unsafeDeserialize . BSL.fromStrict
 -- us to cheat, as not all the monads have a sensible `fail` implementation.
 -- Expect the whole input to be consumed.
 deserialize :: Bi a => BSL.ByteString -> D.Decoder s a
-deserialize = toCborError . decodeFull
+deserialize = toCborError . decodeFull decode label
+
+-- | Deserialize using `BiExtRep` class.
+deserializeWithExtRep :: BiExtRep a => BSL.ByteString -> D.Decoder s (a 'AttrExtRep)
+deserializeWithExtRep bs
+      = toCborError (spliceExtRep (BSL.toStrict bs) <$> decodeFull decodeWithOffsets labelExtRep bs)
 
 -- | Strict version of `deserialize`.
 deserialize' :: Bi a => BS.ByteString -> D.Decoder s a
 deserialize' = deserialize . BSL.fromStrict
 
+-- | Strict version of `deserializeWithExtRep`.
+deserializeWithExtRep' :: BiExtRep a => BS.ByteString -> D.Decoder s (a 'AttrExtRep)
+deserializeWithExtRep' = deserializeWithExtRep . BSL.fromStrict
+
 -- | Deserialize a Haskell value from the external binary representation,
 -- failing if there are leftovers. In a nutshell, the `full` here implies
 -- the contract of this function is that what you feed as input needs to
 -- be consumed entirely.
-decodeFull :: forall a. Bi a => BSL.ByteString -> Either Text a
-decodeFull bs0 = case deserializeOrFail bs0 of
+decodeFull
+    :: forall a
+     . (forall s. D.Decoder s a)
+    -> (Proxy a -> Text)
+    -> BSL.ByteString
+    -> Either Text a
+decodeFull decoder getLabel bs0 = case deserializeOrFail decoder bs0 of
   Right (x, leftover) -> case BS.null leftover of
       True  -> pure x
       False ->
-          let msg = "decodeFull failed for " <> label (Proxy @a) <>
+          let msg = "decodeFull failed for " <> getLabel (Proxy @a) <>
                     "! Leftover found: " <> show leftover
           in Left msg
   Left  (e, _) ->
-      Left $ "decodeFull failed for " <> label (Proxy @a) <> ": " <> show e
+      Left $ "decodeFull failed for " <> getLabel (Proxy @a) <> ": " <> show e
 
-decodeFull' :: forall a. Bi a => BS.ByteString -> Either Text a
-decodeFull' = decodeFull . BSL.fromStrict
+decodeFull'
+    :: (forall s. D.Decoder s a)
+    -> (Proxy a -> Text)
+    -> BS.ByteString
+    -> Either Text a
+decodeFull' decoder getLabel = decodeFull decoder getLabel . BSL.fromStrict
 
 -- | Deserialize a Haskell value from the external binary representation,
 -- returning either (leftover, value) or a (leftover, @'DeserialiseFailure'@).
 deserializeOrFail
-    :: Bi a
-    => BSL.ByteString
+    :: forall a
+     . (forall s. D.Decoder s a)
+    -> BSL.ByteString
     -> Either (CBOR.Read.DeserialiseFailure, BS.ByteString)
               (a, BS.ByteString)
-deserializeOrFail bs0 =
-    runST (supplyAllInput bs0 =<< deserializeIncremental)
+deserializeOrFail decoder bs0 =
+    runST (supplyAllInput bs0 =<< deserializeIncremental decoder)
   where
     supplyAllInput bs' (CBOR.Read.Done bs _ x) =
       return (Right (x, bs <> BSL.toStrict bs'))
@@ -145,11 +168,11 @@ deserializeOrFail bs0 =
 
 -- | Strict variant of 'deserializeOrFail'.
 deserializeOrFail'
-    :: Bi a
-    => BS.ByteString
+    :: (forall s. D.Decoder s a)
+    -> BS.ByteString
     -> Either (CBOR.Read.DeserialiseFailure, BS.ByteString)
               (a, BS.ByteString)
-deserializeOrFail' = deserializeOrFail . BSL.fromStrict
+deserializeOrFail' decoder = deserializeOrFail decoder . BSL.fromStrict
 
 ----------------------------------------
 
@@ -162,8 +185,8 @@ deserializeOrFail' = deserializeOrFail . BSL.fromStrict
 -- Note that the incremental behaviour is only for the input data, not the
 -- output value: the final deserialized value is constructed and returned as a
 -- whole, not incrementally.
-deserializeIncremental :: Bi a => ST s (CBOR.Read.IDecode s a)
-deserializeIncremental = CBOR.Read.deserialiseIncremental decode
+deserializeIncremental :: D.Decoder s a -> ST s (CBOR.Read.IDecode s a)
+deserializeIncremental = CBOR.Read.deserialiseIncremental
 
 ----------------------------------------------------------------------------
 -- Raw
@@ -230,7 +253,7 @@ decodeCborDataItemTag = do
 decodeKnownCborDataItem :: Bi a => D.Decoder s a
 decodeKnownCborDataItem = do
     bs <- decodeUnknownCborDataItem
-    toCborError $ decodeFull' bs
+    toCborError $ decodeFull' decode label bs
 
 -- | Like `decodeKnownCborDataItem`, but assumes nothing about the Haskell
 -- type we want to deserialise back, therefore it yields the `ByteString`
@@ -261,4 +284,4 @@ decodeCrcProtected = do
         actualCrc = crc32 body
     let crcErrorFmt = "decodeCrcProtected, expected CRC " % shown % " was not the computed one, which was " % shown
     when (actualCrc /= expectedCrc) $ cborError (sformat crcErrorFmt expectedCrc actualCrc)
-    toCborError $ decodeFull' body
+    toCborError $ decodeFull' decode label body

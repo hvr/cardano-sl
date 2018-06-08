@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds        #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RecordWildCards  #-}
 
@@ -12,6 +13,7 @@ import qualified Data.ByteString.Lazy as LBS
 import           Formatting (build, sformat, shown)
 import           System.Environment (lookupEnv)
 
+import           Pos.Binary.Class (DecoderAttrKind (..))
 import           Pos.Arbitrary.Block.Generate (generateMainBlock)
 import           Pos.Binary.Class (Bi, serialize, unsafeDeserialize)
 import qualified Pos.Block.BHelpers as Verify
@@ -45,8 +47,8 @@ pc = ProtocolConstants
 -- | A test subject: a MainBlock, and its various components, each paired with
 -- its serialization.
 data TestSubject = TestSubject
-    { tsBlock       :: !(MainBlock, LBS.ByteString)
-    , tsHeader      :: !(MainBlockHeader, LBS.ByteString)
+    { tsBlock       :: !(MainBlock 'AttrNone, LBS.ByteString)
+    , tsHeader      :: !(MainBlockHeader 'AttrNone, LBS.ByteString)
     , tsBodyProof   :: !(BodyProof MainBlockchain, LBS.ByteString)
     , tsConsensus   :: !(ConsensusData MainBlockchain, LBS.ByteString)
     , tsExtraHeader :: !(ExtraHeaderData MainBlockchain, LBS.ByteString)
@@ -104,7 +106,7 @@ testSubject
     -> Int -- ^ Size
     -> TestSubject
 testSubject seed size =
-  let block :: MainBlock
+  let block :: MainBlock 'AttrNone
       block = generateMainBlock pm pc seed size
 
       tsBlock = withSerialized block
@@ -142,9 +144,9 @@ benchMain seed size = defaultMain
                       ]
                 ]
           , bgroup "deserialize" $
-                [ bench "all" (nf (unsafeDeserialize :: LBS.ByteString -> MainBlock) (snd . tsBlock $ ts))
+                [ bench "all" (nf (unsafeDeserialize :: LBS.ByteString -> MainBlock 'AttrNone) (snd . tsBlock $ ts))
                 , bgroup "header" $
-                      [ bench "all" (nf (unsafeDeserialize :: LBS.ByteString -> MainBlockHeader) (snd . tsHeader $ ts))
+                      [ bench "all" (nf (unsafeDeserialize :: LBS.ByteString -> MainBlockHeader 'AttrNone) (snd . tsHeader $ ts))
                       , bench "body_proof" (nf (unsafeDeserialize :: LBS.ByteString -> BodyProof MainBlockchain) (snd . tsBodyProof $ ts))
                       , bench "consensus" (nf (unsafeDeserialize :: LBS.ByteString -> ConsensusData MainBlockchain) (snd . tsConsensus $ ts))
                       , bench "extra" (nf (unsafeDeserialize :: LBS.ByteString -> ExtraHeaderData MainBlockchain) (snd . tsExtraHeader $ ts))

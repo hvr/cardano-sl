@@ -267,7 +267,7 @@ readUserSecret path = do
 #endif
     takeReadLock path $ do
         content <- either (throwM . UserSecretDecodingError . toText) pure .
-                   decodeFull' =<< BS.readFile path
+                   decodeFull' decode label =<< BS.readFile path
         pure $ content & usPath .~ path
 
 -- | Reads user secret from the given file.
@@ -277,7 +277,7 @@ peekUserSecret path = do
     logInfo "initalizing user secret"
     initializeUserSecret path
     takeReadLock path $ do
-        econtent <- decodeFull' <$> BS.readFile path
+        econtent <- decodeFull' decode label <$> BS.readFile path
         pure $ either (const def) identity econtent & usPath .~ path
 
 -- | Read user secret putting an exclusive lock on it. To unlock, use
@@ -287,7 +287,7 @@ takeUserSecret path = do
     initializeUserSecret path
     liftIO $ do
         l <- lockFile (lockFilePath path) Exclusive
-        econtent <- decodeFull' <$> BS.readFile path
+        econtent <- decodeFull' decode label <$> BS.readFile path
         pure $ either (const def) identity econtent
             & usPath .~ path
             & usLock .~ Just l

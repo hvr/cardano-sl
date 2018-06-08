@@ -16,6 +16,7 @@ import           Universum
 import           Control.Lens (Getter, choosing, lens, to)
 import qualified Data.Text.Buildable as Buildable
 
+import           Pos.Binary.Class (DecoderAttrKind)
 import           Pos.Core.Block.Blockchain (GenericBlock (..))
 import           Pos.Core.Block.Genesis ()
 import           Pos.Core.Block.Main ()
@@ -47,7 +48,7 @@ instance HasHeaderHash (Block attr) where
     headerHash = blockHeaderHash . getBlockHeader
 
 -- | Take 'BlockHeader' from either 'GenesisBlock' or 'MainBlock'.
-getBlockHeader :: Block attr -> BlockHeader attr
+getBlockHeader :: forall (attr :: DecoderAttrKind) . Block attr -> BlockHeader attr
 getBlockHeader = \case
     Left  gb -> BlockHeaderGenesis (_gbHeader gb)
     Right mb -> BlockHeaderMain    (_gbHeader mb)

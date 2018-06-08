@@ -22,11 +22,11 @@ import           Pos.Util.TimeWarp (NetworkAddress)
 
 instance Bi DHTData => K.Serialize DHTData where
     toBS   = serialize'
-    fromBS = bimap (show . fst) identity . deserializeOrFail'
+    fromBS = bimap (show . fst) identity . deserializeOrFail' decode
 
 instance Bi DHTKey => K.Serialize DHTKey where
     toBS   = serialize'
-    fromBS = bimap (show . fst) identity . deserializeOrFail'
+    fromBS = bimap (show . fst) identity . deserializeOrFail' decode
 
 type DHTHandle = K.KademliaInstance DHTKey DHTData
 

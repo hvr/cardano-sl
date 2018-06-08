@@ -36,6 +36,8 @@ module Pos.Binary.Class.Core
     , toCborError
     , cborError
     , spliceExtRep'
+    , EitherExtRep (..)
+    , NonEmptyExtRep (..)
     ) where
 
 import           Universum
@@ -66,6 +68,8 @@ import qualified Data.Vector.Generic as Vector.Generic
 import           Formatting (bprint, int, string, (%))
 import qualified GHC.Generics as G
 import           Serokell.Data.Memory.Units (Byte, fromBytes, toBytes)
+import           Test.QuickCheck (Arbitrary (..))
+
 
 -- | This function must match the one from 'Pos.Util.Util'. It is copied here
 -- to avoid a dependency and facilitate parallel builds.
@@ -134,6 +138,10 @@ instance Wrapped (DecoderAttr 'AttrExtRep) where
         unwrap :: DecoderAttr 'AttrExtRep -> ByteString
         unwrap (DecoderAttrExtRep bs) = bs
 
+instance Arbitrary (DecoderAttr 'AttrNone) where
+    arbitrary   = return DecoderAttrNone
+    shrink _    = []
+
 -- | Helper function useful when implementing `spliceExtRep`.
 spliceExtRep' :: ByteString -> DecoderAttr 'AttrOffsets -> DecoderAttr 'AttrExtRep
 spliceExtRep' bs (DecoderAttrOffsets n m) = DecoderAttrExtRep
@@ -161,37 +169,41 @@ class Typeable a => Bi a where
     label = show . typeRep
 
     encodeList :: [a] -> E.Encoding
-    encodeList = defaultEncodeList
+    encodeList = defaultEncodeList encode
 
     decodeList :: D.Decoder s [a]
-    decodeList = defaultDecodeList
+    decodeList = defaultDecodeList decode
 
 -- |
 -- Binary encoding / decoding based on cborg library with decoding external
 -- representation.
-class Typeable a => BiExtRep (a :: DecoderAttrKind -> *) where
+class Typeable (a 'AttrOffsets) => BiExtRep (a :: DecoderAttrKind -> *) where
     -- | Encode using CBOR @'Encoding'@.
     encodeExtRep        :: a 'AttrExtRep -> E.Encoding
     -- | Recursively decode with attribute offsets.
     decodeWithOffsets   :: D.Decoder s (a 'AttrOffsets)
     -- | Recursively splice external representation from byte offsets.
+    -- TODO: maybe it should take lazy `ByteString`
     spliceExtRep        :: ByteString -> a 'AttrOffsets -> a 'AttrExtRep
     -- | Recursively forget external representation.
-    forgetExtRep        :: a attr -> a 'AttrNone
+    forgetExtRep        :: a (attr :: DecoderAttrKind) -> a 'AttrNone
+
+    labelExtRep :: Proxy (a 'AttrOffsets) -> Text
+    labelExtRep = show . typeRep
 
     default encodeExtRep :: Bi (a 'AttrNone) => a 'AttrExtRep -> E.Encoding
     encodeExtRep = encode . forgetExtRep
 
 -- | Default @'E.Encoding'@ for list types.
-defaultEncodeList :: Bi a => [a] -> E.Encoding
-defaultEncodeList xs = E.encodeListLenIndef
-                    <> Universum.foldr (\x r -> encode x <> r) E.encodeBreak xs
+defaultEncodeList :: (a -> E.Encoding) ->  [a] -> E.Encoding
+defaultEncodeList encoder xs = E.encodeListLenIndef
+                    <> Universum.foldr (\x r -> encoder x <> r) E.encodeBreak xs
 
 -- | Default @'D.Decoder'@ for list types.
-defaultDecodeList :: Bi a => D.Decoder s [a]
-defaultDecodeList = do
+defaultDecodeList :: D.Decoder s a -> D.Decoder s [a]
+defaultDecodeList decoder = do
     D.decodeListLenIndef
-    D.decodeSequenceLenIndef (flip (:)) [] reverse decode
+    D.decodeSequenceLenIndef (flip (:)) [] reverse decoder
 
 ----------------------------------------------------------------------------
 -- Primitive types
@@ -345,12 +357,62 @@ instance (Bi a, Bi b) => Bi (Either a b) where
                           return (Right x)
                   _ -> cborError $ "decode@Either: unknown tag " <> show t
 
+-- |
+-- Newtype wrapper for `Either` instance of `BiExtRep`.
+--
+-- TODO This is only neccessary because of the `Block` type alias.  We should
+-- use a proper data type and remove `EitherExtRep`.
+newtype EitherExtRep (f :: DecoderAttrKind -> *) (g :: DecoderAttrKind -> *) (a :: DecoderAttrKind)
+    = EitherExtRep { runEitherExtRep :: Either (f a) (g a) }
+
+instance (Typeable f, Typeable g, Bi (f 'AttrNone), Bi (g 'AttrNone)) => Bi (EitherExtRep f g 'AttrNone) where
+    -- lift the `Bi` instance for `Either`
+    encode (EitherExtRep e) = encode e
+    decode = EitherExtRep <$> decode
+
+instance (Typeable f, Typeable g, BiExtRep f, BiExtRep g) => BiExtRep (EitherExtRep f g) where
+    encodeExtRep (EitherExtRep (Left f)) = E.encodeListLen 2 <> E.encodeWord 0 <> encodeExtRep f
+    encodeExtRep (EitherExtRep (Right g)) = E.encodeListLen 2 <> E.encodeWord 1 <> encodeExtRep g
+    decodeWithOffsets = do D.decodeListLenCanonicalOf 2
+                           t <- D.decodeWordCanonical
+                           case t of
+                               0 -> do !x <- decodeWithOffsets
+                                       return (EitherExtRep (Left x))
+                               1 -> do !x <- decodeWithOffsets
+                                       return (EitherExtRep (Right x))
+                               _ -> cborError $ "decode@EitherExtRep: unknown tag " <> show t
+    spliceExtRep bs = EitherExtRep . bimap (spliceExtRep bs) (spliceExtRep bs) . runEitherExtRep
+    forgetExtRep = EitherExtRep . bimap forgetExtRep forgetExtRep . runEitherExtRep
+
 instance Bi a => Bi (NonEmpty a) where
-    encode = defaultEncodeList . toList
+    encode = defaultEncodeList encode . toList
     decode =
-        nonEmpty <$> defaultDecodeList >>= toCborError . \case
+        nonEmpty <$> defaultDecodeList decode >>= toCborError . \case
             Nothing -> Left "Expected a NonEmpty list, but an empty list was found!"
             Just xs -> Right xs
+
+newtype NonEmptyExtRep (a :: DecoderAttrKind -> *) (attr :: DecoderAttrKind)
+    = NonEmptyExtRep { runNonEmptyExtRep :: NonEmpty (a attr) }
+
+instance (Typeable f, Bi (f 'AttrNone)) => Bi (NonEmptyExtRep f 'AttrNone) where
+    encode (NonEmptyExtRep bs) = encode bs
+    decode = NonEmptyExtRep <$> decode
+
+fmapNonEmptyExtRep
+    :: forall (attr :: DecoderAttrKind) (attr' :: DecoderAttrKind) a a' .
+       (a attr -> a' attr')
+    -> NonEmptyExtRep a attr
+    -> NonEmptyExtRep a' attr'
+fmapNonEmptyExtRep f (NonEmptyExtRep as) = NonEmptyExtRep $ fmap f as
+
+instance (Typeable a, BiExtRep a) => BiExtRep (NonEmptyExtRep a) where
+    encodeExtRep (NonEmptyExtRep as) = defaultEncodeList encodeExtRep (toList as)
+    decodeWithOffsets =
+        nonEmpty <$> defaultDecodeList decodeWithOffsets >>= toCborError . \case
+            Nothing -> Left "Expected a NonEmpty list, but an empty list was found!"
+            Just xs -> Right $ NonEmptyExtRep xs
+    spliceExtRep bs xs = fmapNonEmptyExtRep (spliceExtRep bs) xs
+    forgetExtRep xs = fmapNonEmptyExtRep forgetExtRep xs
 
 instance Bi a => Bi (Maybe a) where
     encode Nothing  = E.encodeListLen 0

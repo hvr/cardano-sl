@@ -1,9 +1,10 @@
--- | Types used for block processing: most importantly, 'Undo' and 'Blund'.
+-- | Types used for block processing: most importantly, 'attrUndo' and 'Blund'.
 
 module Pos.Block.Types
        ( SlogUndo (..)
        , Undo (..)
        , Blund
+       , forgetBlundExtRep
 
        , LastKnownHeader
        , LastKnownHeaderTag
@@ -21,6 +22,7 @@ import qualified Data.Text.Buildable
 import           Formatting (bprint, build, (%))
 import           Serokell.Util.Text (listJson)
 
+import           Pos.Binary.Class (DecoderAttrKind (..), forgetExtRep)
 import           Pos.Block.Slog.Types (SlogUndo (..))
 import           Pos.Communication.Protocol (NodeId)
 import           Pos.Core (HasConfiguration, HasDifficulty (..), HasHeaderHash (..))
@@ -43,6 +45,9 @@ instance NFData Undo
 -- | Block and its Undo.
 type Blund attr = (Block attr, Undo)
 
+forgetBlundExtRep :: Blund attr -> Blund 'AttrNone
+forgetBlundExtRep (b, u) = (bimap forgetExtRep forgetExtRep b, u)
+
 instance HasConfiguration => Buildable Undo where
     build Undo{..} =
         bprint ("Undo:\n"%
@@ -61,11 +66,11 @@ instance HasHeaderHash (Block attr) => HasHeaderHash (Blund attr) where
 -- | For a description of what these types mean,
 -- please refer to @NodeContext@ in @Pos.Context.Context@.
 data LastKnownHeaderTag
-type LastKnownHeader attr = TVar (Maybe (BlockHeader attr))
-type MonadLastKnownHeader attr ctx m
-     = (MonadReader ctx m, HasLens LastKnownHeaderTag ctx (LastKnownHeader attr))
+type LastKnownHeader = TVar (Maybe (BlockHeader 'AttrNone))
+type MonadLastKnownHeader ctx m
+     = (MonadReader ctx m, HasLens LastKnownHeaderTag ctx LastKnownHeader)
 
 data RecoveryHeaderTag
-type RecoveryHeader attr = STM.TMVar (NodeId, BlockHeader attr)
-type MonadRecoveryHeader attr ctx m
-     = (MonadReader ctx m, HasLens RecoveryHeaderTag ctx (RecoveryHeader attr))
+type RecoveryHeader = STM.TMVar (NodeId, BlockHeader 'AttrNone)
+type MonadRecoveryHeader ctx m
+     = (MonadReader ctx m, HasLens RecoveryHeaderTag ctx RecoveryHeader)

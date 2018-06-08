@@ -13,7 +13,7 @@ import           Data.Default (Default)
 import           Mockable (Delay, Mockables, SharedAtomic)
 import           System.Wlog (WithLogger)
 
-import           Pos.Binary.Class (Bi)
+import           Pos.Binary.Class (DecoderAttrKind (..))
 import           Pos.Block.Configuration (HasBlockConfiguration)
 import           Pos.Block.Lrc (LrcModeFull)
 import           Pos.Block.Network.Types (MsgBlock, MsgGetBlocks, MsgGetHeaders, MsgHeaders)
@@ -37,22 +37,17 @@ import           Pos.Util.Util (HasLens, HasLens')
 -- @Pos.Communication.Message@ and @Pos.Communication.Limits@, which
 -- are unavailable at this point, hence we defer providing them
 -- to the calling site.
-type BlockInstancesConstraint =
-    ( Each '[Bi]
+type BlockInstancesConstraint attr =
+    ( Each '[Message]
         [ MsgGetHeaders
-        , MsgHeaders
+        , MsgHeaders attr
         , MsgGetBlocks
-        , MsgBlock ]
-    , Each '[Message]
-        [ MsgGetHeaders
-        , MsgHeaders
-        , MsgGetBlocks
-        , MsgBlock ]
+        , MsgBlock attr ]
     )
 
 -- | A subset of @WorkMode@.
 type BlockWorkMode ctx m =
-    ( BlockInstancesConstraint
+    ( BlockInstancesConstraint 'AttrExtRep
 
     , Default (MempoolExt m)
     , Mockables m [Delay, SharedAtomic]

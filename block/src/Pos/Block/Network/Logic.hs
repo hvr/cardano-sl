@@ -27,6 +27,7 @@ import           Serokell.Util.Text (listJson)
 import qualified System.Metrics.Gauge as Metrics
 import           System.Wlog (logDebug, logInfo, logWarning)
 
+import           Pos.Binary.Class (DecoderAttrKind (..), forgetExtRep)
 import           Pos.Binary.Txp ()
 import           Pos.Block.BlockWorkMode (BlockWorkMode)
 import           Pos.Block.Error (ApplyBlocksException)
@@ -40,7 +41,6 @@ import           Pos.Communication.Protocol (NodeId)
 import           Pos.Core (HasHeaderHash (..), HeaderHash, gbHeader, headerHashG, isMoreDifficult,
                            prevBlockL)
 import           Pos.Core.Block (Block, BlockHeader, blockHeader, shortHeaderHashF)
-import           Pos.Crypto (shortHashF)
 import qualified Pos.DB.Block.Load as DB
 import           Pos.Diffusion.Types (Diffusion)
 import qualified Pos.Diffusion.Types as Diffusion (Diffusion (announceBlockHeader, requestTip))
@@ -129,7 +129,7 @@ triggerRecovery diffusion = unlessM recoveryInProgress $ do
 handleUnsolicitedHeader
     :: ( BlockWorkMode ctx m
        )
-    => BlockHeader
+    => BlockHeader 'AttrExtRep
     -> NodeId
     -> m ()
 handleUnsolicitedHeader header nodeId = do
@@ -171,7 +171,7 @@ addHeaderToBlockRequestQueue
     :: forall ctx m.
        (BlockWorkMode ctx m)
     => NodeId
-    -> BlockHeader
+    -> BlockHeader 'AttrExtRep
     -> Bool -- ^ Was the block classified as chain continuation?
     -> m ()
 addHeaderToBlockRequestQueue nodeId header continues = do
@@ -180,7 +180,7 @@ addHeaderToBlockRequestQueue nodeId header continues = do
     queue <- view (lensOf @BlockRetrievalQueueTag)
     lastKnownH <- view (lensOf @LastKnownHeaderTag)
     added <- atomically $ do
-        updateLastKnownHeader lastKnownH header
+        updateLastKnownHeader lastKnownH (forgetExtRep header)
         addTaskToBlockRequestQueue nodeId queue $
             BlockRetrievalTask { brtHeader = header, brtContinues = continues }
     if added
@@ -202,8 +202,8 @@ addTaskToBlockRequestQueue nodeId queue task = do
         (True <$ writeTBQueue queue (nodeId, task))
 
 updateLastKnownHeader
-    :: TVar (Maybe BlockHeader)
-    -> BlockHeader attr
+    :: TVar (Maybe (BlockHeader 'AttrNone))
+    -> BlockHeader 'AttrNone
     -> STM ()
 updateLastKnownHeader lastKnownH header = do
     oldV <- readTVar lastKnownH
@@ -216,11 +216,11 @@ updateLastKnownHeader lastKnownH header = do
 
 -- | Carefully apply blocks that came from the network.
 handleBlocks
-    :: forall ctx m .
+    :: forall ctx m.
        ( BlockWorkMode ctx m
        , HasMisbehaviorMetrics ctx
        )
-    => OldestFirst NE (Block attr)
+    => OldestFirst NE (Block 'AttrExtRep)
     -> Diffusion m
     -> m ()
 handleBlocks blocks diffusion = do
@@ -238,9 +238,9 @@ handleBlocks blocks diffusion = do
 
     handleBlocksWithLca :: HeaderHash -> m ()
     handleBlocksWithLca lcaHash = do
-        logDebug $ sformat ("Handling block w/ LCA, which is "%shortHashF) lcaHash
+        logDebug $ sformat ("Handling block w/ LCA, which is "%shortHeaderHashF) lcaHash
         -- Head blund in result is the youngest one.
-        toRollback <- DB.loadBlundsFromTipWhile $ \blk -> headerHash blk /= lcaHash
+        toRollback <- DB.loadBlundsWithExtRepFromTipWhile $ \blk -> headerHash blk /= lcaHash
         maybe (applyWithoutRollback diffusion blocks)
               (applyWithRollback diffusion blocks lcaHash)
               (_NewestFirst nonEmpty toRollback)
@@ -251,7 +251,7 @@ applyWithoutRollback
        , HasMisbehaviorMetrics ctx
        )
     => Diffusion m
-    -> OldestFirst NE (Block attr)
+    -> OldestFirst NE (Block 'AttrExtRep)
     -> m ()
 applyWithoutRollback diffusion blocks = do
     logInfo . sformat ("Trying to apply blocks w/o rollback. " % multilineBounds 6)
@@ -262,7 +262,7 @@ applyWithoutRollback diffusion blocks = do
         Right newTip -> do
             when (newTip /= newestTip) $
                 logWarning $ sformat
-                    ("Only blocks up to "%shortHashF%" were applied, "%
+                    ("Only blocks up to "%shortHeaderHashF%" were applied, "%
                      "newer were considered invalid")
                     newTip
             let toRelay =
@@ -293,9 +293,9 @@ applyWithRollback
        , HasMisbehaviorMetrics ctx
        )
     => Diffusion m
-    -> OldestFirst NE Block
+    -> OldestFirst NE (Block 'AttrExtRep)
     -> HeaderHash
-    -> NewestFirst NE Blund
+    -> NewestFirst NE (Blund 'AttrExtRep)
     -> m ()
 applyWithRollback diffusion toApply lca toRollback = do
     logInfo . sformat ("Trying to apply blocks w/o rollback. " % multilineBounds 6)
@@ -309,7 +309,7 @@ applyWithRollback diffusion toApply lca toRollback = do
             logWarning $ "Couldn't apply blocks with rollback: " <> err
         Right newTip -> do
             logDebug $ sformat
-                ("Finished applying blocks w/ rollback, relaying new tip: "%shortHashF)
+                ("Finished applying blocks w/ rollback, relaying new tip: "%shortHeaderHashF)
                 newTip
             reportRollback
             logInfo $ blocksRolledBackMsg (getNewestFirst toRollback)
@@ -335,15 +335,15 @@ applyWithRollback diffusion toApply lca toRollback = do
 relayBlock
     :: forall ctx m.
        (BlockWorkMode ctx m)
-    => Diffusion m -> Block attr -> m ()
+    => Diffusion m -> Block 'AttrExtRep -> m ()
 relayBlock _ (Left _)                  = logDebug "Not relaying Genesis block"
 relayBlock diffusion (Right mainBlk) = do
     recoveryInProgress >>= \case
         True -> logDebug "Not relaying block in recovery mode"
         False -> do
-            logDebug $ sformat ("Calling announceBlock for "%shortHashF%".")
+            logDebug $ sformat ("Calling announceBlock for "%shortHeaderHashF%".")
                        (mainBlk ^. gbHeader . headerHashG)
-            void $ Diffusion.announceBlockHeader diffusion $ mainBlk ^. gbHeader
+            void $ Diffusion.announceBlockHeader diffusion $ forgetExtRep $ mainBlk ^. gbHeader
 
 ----------------------------------------------------------------------------
 -- Common logging / logic sink points
@@ -351,7 +351,7 @@ relayBlock diffusion (Right mainBlk) = do
 
 -- TODO: ban node for it!
 onFailedVerifyBlocks
-    :: forall ctx m.
+    :: forall attr ctx m.
        (BlockWorkMode ctx m)
     => NonEmpty (Block attr) -> Text -> m ()
 onFailedVerifyBlocks blocks err = do
@@ -364,7 +364,7 @@ blocksAppliedMsg
        HasHeaderHash a
     => NonEmpty a -> Text
 blocksAppliedMsg (block :| []) =
-    sformat ("Block has been adopted "%shortHashF) (headerHash block)
+    sformat ("Block has been adopted "%shortHeaderHashF) (headerHash block)
 blocksAppliedMsg blocks =
     sformat ("Blocks have been adopted: "%listJson) (fmap (headerHash @a) blocks)
 

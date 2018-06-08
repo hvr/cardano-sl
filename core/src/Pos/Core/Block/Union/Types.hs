@@ -13,7 +13,7 @@ module Pos.Core.Block.Union.Types
        , _BlockHeaderMain
        , eitherBlockHeader
        , choosingBlockHeader
-       , blockHeaderDecoderAttr
+       , genericBlockHeaderDecoderAttr
        , Block
        , blockDecoderAttr
 
@@ -54,10 +54,14 @@ import           Codec.CBOR.Encoding (encodeWord)
 import           Control.Lens (Getter, LensLike', choosing, makePrisms, to)
 import           Crypto.Hash (digestFromByteString)
 import qualified Data.ByteArray as BA
+import qualified Data.ByteString as BS
 import qualified Data.Text.Buildable as Buildable
 import qualified Data.Text.Lazy.Builder as Builder
 import           Formatting (Format, bprint, build, fitLeft, later, (%), (%.))
 import           Universum
+import           Test.QuickCheck (Arbitrary (..), Gen)
+import           Test.Pos.Util.QuickCheck.Arbitrary (ArbitraryUnsafe (..))
+import           Test.Pos.Crypto.Arbitrary ()
 
 import           Pos.Binary.Class (Bi (..), BiExtRep, DecoderAttr (..),
                                    DecoderAttrKind (..), decodeWithOffsets,
@@ -95,9 +99,9 @@ data GenesisBlockchain
 type GenesisBlockHeader attr = GenericBlockHeader GenesisBlockchain attr
 
 -- | Genesis block parametrized by 'GenesisBlockchain'.
-type GenesisBlock attr = GenericBlock GenesisBlockchain attr
+type GenesisBlock (attr :: DecoderAttrKind) = GenericBlock GenesisBlockchain attr
 
-instance Blockchain GenesisBlockchain attr where
+instance Blockchain GenesisBlockchain (attr :: DecoderAttrKind) where
     type BodyProof GenesisBlockchain = GenesisProof
     type ConsensusData GenesisBlockchain = GenesisConsensusData
     type BBlockHeader GenesisBlockchain attr = Hash (BlockHeader attr)
@@ -120,11 +124,11 @@ instance Blockchain GenesisBlockchain attr where
 data MainBlockchain
 
 -- | Header of generic main block.
-type MainBlockHeader attr = GenericBlockHeader MainBlockchain attr
+type MainBlockHeader (attr :: DecoderAttrKind) = GenericBlockHeader MainBlockchain attr
 
 -- | MainBlock is a block with transactions and MPC messages. It's the
 -- main part of our consensus algorithm.
-type MainBlock attr = GenericBlock MainBlockchain attr
+type MainBlock (attr :: DecoderAttrKind) = GenericBlock MainBlockchain attr
 
 -- | Signature of the block. Can be either regular signature from the
 -- issuer or delegated signature having a constraint on epoch indices
@@ -242,7 +246,7 @@ instance ( Bi MainProof ) =>
 ----------------------------------------------------------------------------
 
 -- | Either header of ordinary main block or genesis block.
-data BlockHeader attr
+data BlockHeader (attr :: DecoderAttrKind)
     = BlockHeaderGenesis (GenesisBlockHeader attr)
     | BlockHeaderMain (MainBlockHeader attr)
 
@@ -274,8 +278,10 @@ choosingBlockHeader onGenesis onMain f = \case
     BlockHeaderGenesis bh -> BlockHeaderGenesis <$> onGenesis f bh
     BlockHeaderMain bh -> BlockHeaderMain <$> onMain f bh
 
-blockHeaderDecoderAttr :: BlockHeader attr -> DecoderAttr attr
-blockHeaderDecoderAttr = eitherBlockHeader _gbhDecoderAttr _gbhDecoderAttr
+-- |
+-- Get `DecoderAttr` of `GenericBlockHeader` from a `BlockHeader`.
+genericBlockHeaderDecoderAttr :: BlockHeader attr -> DecoderAttr attr
+genericBlockHeaderDecoderAttr = eitherBlockHeader _gbhDecoderAttr _gbhDecoderAttr
 
 instance Bi (BlockHeader 'AttrNone) where
    encode x = encodeListLen 2 <> encodeWord tag <> body
@@ -333,6 +339,12 @@ deriving instance NFData HeaderHash
 instance Buildable HeaderHash where
     build (HeaderHash (AbstractHash h)) = Builder.fromString $ show h
 
+instance Arbitrary HeaderHash where
+    arbitrary = anyHeaderHash <$> hh
+        where
+            hh :: Gen (Hash (BlockHeader 'AttrNone))
+            hh = arbitraryUnsafe
+
 -- | Specialized formatter for 'HeaderHash'.
 headerHashHexF :: Format r (HeaderHash -> r)
 headerHashHexF = later $ \(HeaderHash (AbstractHash x)) -> Buildable.build (show x :: Text)
@@ -384,9 +396,12 @@ blockHeaderHash bh =
         DecoderAttrOffsets _ _
             -> anyHeaderHash $ hash $ forgetExtRep $ bh
         DecoderAttrExtRep bs
-            -> anyHeaderHash $ unsafeHashRaw'
-                (Proxy :: Proxy (BlockHeader 'AttrExtRep))
-                bs
+            -> let bs' = case bh of
+                    BlockHeaderGenesis _ -> BS.pack [0x82, 0] <> bs
+                    BlockHeaderMain    _ -> BS.pack [0x82, 1] <> bs
+               in anyHeaderHash $ unsafeHashRaw'
+                    (Proxy :: Proxy (BlockHeader 'AttrExtRep))
+                    bs'
 
 -- HasPrevBlock
 -- | Class for something that has previous block (lens to 'Hash' for this block).

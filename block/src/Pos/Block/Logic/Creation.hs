@@ -24,8 +24,8 @@ import           JsonLog (CanJsonLog (..))
 import           Serokell.Data.Memory.Units (Byte, memory)
 import           System.Wlog (WithLogger, logDebug)
 
-import           Pos.Binary.Class (biSize)
-import           Pos.Block.Base (mkGenesisBlock, mkMainBlock)
+import           Pos.Binary.Class (DecoderAttrKind (..), DecoderAttr (..), biSize)
+import           Pos.Block.Base (mkGenesisBlock, mkMainBlock')
 import           Pos.Block.Logic.Internal (MonadBlockApply, VerifyBlocksContext (..), applyBlocksUnsafe, normalizeMempool)
 import           Pos.Block.Logic.Util (calcChainQualityM)
 import           Pos.Block.Logic.VAR (verifyBlocksPrefix, getVerifyBlocksContext)
@@ -126,7 +126,7 @@ createGenesisBlockAndApply ::
        , HasMisbehaviorMetrics ctx
        )
     => EpochIndex
-    -> m (Maybe GenesisBlock)
+    -> m (Maybe (GenesisBlock 'AttrNone))
 -- Genesis block for 0-th epoch is hardcoded.
 createGenesisBlockAndApply 0 = pure Nothing
 createGenesisBlockAndApply epoch = do
@@ -147,23 +147,25 @@ createGenesisBlockDo
        , HasMisbehaviorMetrics ctx
        )
     => EpochIndex
-    -> m (HeaderHash, Maybe GenesisBlock)
+    -> m (HeaderHash, Maybe (GenesisBlock 'AttrNone))
 createGenesisBlockDo epoch = do
     tipHeader <- DB.getTipHeader
     logDebug $ sformat msgTryingFmt epoch tipHeader
-    needCreateGenesisBlock epoch tipHeader >>= \case
-        False -> (BC.blockHeaderHash tipHeader, Nothing) <$ logShouldNot
-        True -> actuallyCreate tipHeader
+    needsBlock <- needCreateGenesisBlock epoch tipHeader
+    if needsBlock
+        then (BC.blockHeaderHash tipHeader, Nothing) <$ logShouldNot
+        else actuallyCreate tipHeader
   where
     -- We need to run LRC here to make 'verifyBlocksPrefix' not hang.
     -- It's important to do it after taking 'StateLock'.
     -- Note that it shouldn't fail, because 'shouldCreate' guarantees that we
     -- have enough blocks for LRC.
+    actuallyCreate :: BlockHeader 'AttrNone -> m (HeaderHash, Maybe (GenesisBlock 'AttrNone))
     actuallyCreate tipHeader = do
         lrcSingleShot epoch
         leaders <- lrcActionOnEpochReason epoch "createGenesisBlockDo "
             LrcDB.getLeadersForEpoch
-        let blk = mkGenesisBlock protocolMagic (Right tipHeader) epoch leaders
+        let blk = mkGenesisBlock protocolMagic (Right tipHeader) epoch leaders DecoderAttrNone DecoderAttrNone
         let newTip = headerHash blk
         ctx <- getVerifyBlocksContext
         verifyBlocksPrefix ctx (one (Left blk)) >>= \case
@@ -189,7 +191,7 @@ needCreateGenesisBlock ::
        ( MonadCreateBlock ctx m
        )
     => EpochIndex
-    -> BlockHeader
+    -> BlockHeader 'AttrNone
     -> m Bool
 needCreateGenesisBlock epoch tipHeader = do
     case tipHeader of
@@ -231,7 +233,7 @@ createMainBlockAndApply ::
        )
     => SlotId
     -> ProxySKBlockInfo
-    -> m (Either Text MainBlock)
+    -> m (Either Text (MainBlock 'AttrNone))
 createMainBlockAndApply sId pske =
     modifyStateLock HighPriority ApplyBlock createAndApply
   where
@@ -259,8 +261,8 @@ createMainBlockInternal ::
        )
     => SlotId
     -> ProxySKBlockInfo
-    -> BlockHeader
-    -> m (Either Text MainBlock)
+    -> BlockHeader 'AttrNone
+    -> m (Either Text (MainBlock 'AttrNone))
 createMainBlockInternal sId pske tipHeader = do
     logInfoS $ sformat msgFmt tipHeader
     canCreateBlock sId tipHeader >>= \case
@@ -268,7 +270,7 @@ createMainBlockInternal sId pske tipHeader = do
         Right () -> runExceptT (createMainBlockFinish tipHeader)
   where
     msgFmt = "We are trying to create main block, our tip header is\n"%build
-    createMainBlockFinish :: BlockHeader -> ExceptT Text m MainBlock
+    createMainBlockFinish :: BlockHeader 'AttrNone -> ExceptT Text m (MainBlock 'AttrNone)
     createMainBlockFinish prevHeader = do
         rawPay <- lift $ getRawPayload (headerHash prevHeader) sId
         sk <- getOurSecretKey
@@ -283,7 +285,7 @@ createMainBlockInternal sId pske tipHeader = do
 
 canCreateBlock :: MonadCreateBlock ctx m
     => SlotId
-    -> BlockHeader
+    -> BlockHeader 'AttrNone
     -> m (Either Text ())
 canCreateBlock sId tipHeader =
     runExceptT $ do
@@ -318,16 +320,16 @@ createMainBlockPure
     :: forall m.
        ( MonadError Text m, HasUpdateConfiguration, HasProtocolMagic, HasProtocolConstants )
     => Byte                   -- ^ Block size limit (real max.value)
-    -> BlockHeader
+    -> BlockHeader 'AttrNone
     -> ProxySKBlockInfo
     -> SlotId
     -> SecretKey
     -> RawPayload
-    -> m MainBlock
+    -> m (MainBlock 'AttrNone)
 createMainBlockPure limit prevHeader pske sId sk rawPayload = do
     bodyLimit <- execStateT computeBodyLimit limit
     body <- createMainBody bodyLimit sId rawPayload
-    pure (mkMainBlock pm bv sv (Right prevHeader) sId sk pske body)
+    pure (mkMainBlock' pm bv sv (Right prevHeader) sId sk pske body)
   where
     -- default ssc to put in case we won't fit a normal one
     defSsc :: SscPayload
@@ -337,7 +339,7 @@ createMainBlockPure limit prevHeader pske sId sk rawPayload = do
         -- account for block header and serialization overhead, etc;
         let musthaveBody = BC.MainBody emptyTxPayload defSsc def def
         let musthaveBlock =
-                mkMainBlock pm bv sv (Right prevHeader) sId sk pske musthaveBody
+                mkMainBlock' pm bv sv (Right prevHeader) sId sk pske musthaveBody
         let mhbSize = biSize musthaveBlock
         when (mhbSize > limit) $ throwError $
             "Musthave block size is more than limit: " <> show mhbSize
@@ -368,12 +370,12 @@ applyCreatedBlock ::
     , HasGenesisBlockVersionData
     )
     => ProxySKBlockInfo
-    -> MainBlock
-    -> m MainBlock
+    -> MainBlock 'AttrNone
+    -> m (MainBlock 'AttrNone)
 applyCreatedBlock pske createdBlock = applyCreatedBlockDo False createdBlock
   where
     slotId = createdBlock ^. BC.mainBlockSlot
-    applyCreatedBlockDo :: Bool -> MainBlock -> m MainBlock
+    applyCreatedBlockDo :: Bool -> MainBlock 'AttrNone -> m (MainBlock 'AttrNone)
     applyCreatedBlockDo isFallback blockToApply = do
         ctx <- getVerifyBlocksContext
         verifyBlocksPrefix ctx (one (Right blockToApply)) >>= \case
@@ -396,7 +398,7 @@ applyCreatedBlock pske createdBlock = applyCreatedBlockDo False createdBlock
         sscResetLocal
         clearUSMemPool
         clearDlgMemPool
-    fallback :: Text -> m MainBlock
+    fallback :: Text -> m (MainBlock 'AttrNone)
     fallback reason = do
         let message = sformat ("We've created bad main block: "%stext) reason
         -- REPORT:ERROR Created bad main block

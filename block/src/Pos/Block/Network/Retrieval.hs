@@ -19,15 +19,15 @@ import           Mockable (delay)
 import           Serokell.Util (sec)
 import           System.Wlog (logDebug, logError, logInfo, logWarning)
 
+import           Pos.Binary.Class (BiExtRep (..), DecoderAttrKind (..))
 import           Pos.Block.BlockWorkMode (BlockWorkMode)
 import           Pos.Block.Logic (ClassifyHeaderRes (..), classifyNewHeader, getHeadersOlderExp)
 import           Pos.Block.Network.Logic (BlockNetLogicException (..), handleBlocks, triggerRecovery)
 import           Pos.Block.RetrievalQueue (BlockRetrievalQueueTag, BlockRetrievalTask (..))
 import           Pos.Block.Types (RecoveryHeaderTag)
 import           Pos.Communication.Protocol (NodeId)
-import           Pos.Core (Block, HasHeaderHash (..),  HeaderHash, difficultyL, isMoreDifficult)
+import           Pos.Core (Block, HasHeaderHash (..),  HeaderHash, difficultyL, isMoreDifficult, shortHeaderHashF)
 import           Pos.Core.Block (BlockHeader)
-import           Pos.Crypto (shortHashF)
 import qualified Pos.DB.BlockIndex as DB
 import           Pos.Diffusion.Types (Diffusion)
 import qualified Pos.Diffusion.Types as Diffusion (Diffusion (getBlocks))
@@ -126,7 +126,7 @@ retrievalWorker diffusion = do
             _ -> do
                 logDebug "handleAlternative: considering header for recovery mode"
                 -- CSL-1514
-                updateRecoveryHeader nodeId header
+                updateRecoveryHeader nodeId (forgetExtRep header)
 
     -- Squelch the exception and continue. Used with 'handleAny' from
     -- safe-exceptions so it will let async exceptions pass.
@@ -152,7 +152,7 @@ retrievalWorker diffusion = do
 
     -- Recovery handling. We assume that header in the recovery variable is
     -- appropriate and just query headers/blocks.
-    handleRecovery :: NodeId -> BlockHeader -> m ()
+    handleRecovery :: NodeId -> BlockHeader attr -> m ()
     handleRecovery nodeId rHeader = do
         logDebug "Block retrieval queue is empty and we're in recovery mode,\
                  \ so we will fetch more blocks"
@@ -170,12 +170,12 @@ retrievalWorker diffusion = do
 
 -- | Result of attempt to update recovery header.
 data UpdateRecoveryResult ssc
-    = RecoveryStarted NodeId BlockHeader
+    = RecoveryStarted NodeId (BlockHeader 'AttrNone)
       -- ^ Recovery header was absent, so we've set it.
-    | RecoveryShifted NodeId BlockHeader NodeId BlockHeader
+    | RecoveryShifted NodeId (BlockHeader 'AttrNone) NodeId (BlockHeader 'AttrNone)
       -- ^ Header was present, but we've replaced it with another
       -- (more difficult) one.
-    | RecoveryContinued NodeId BlockHeader
+    | RecoveryContinued NodeId (BlockHeader 'AttrNone)
       -- ^ Header is good, but is irrelevant, so recovery variable is
       -- unchanged.
 
@@ -186,7 +186,7 @@ data UpdateRecoveryResult ssc
 updateRecoveryHeader
     :: BlockWorkMode ctx m
     => NodeId
-    -> BlockHeader
+    -> BlockHeader 'AttrNone
     -> m ()
 updateRecoveryHeader nodeId hdr = do
     recHeaderVar <- view (lensOf @RecoveryHeaderTag)
@@ -281,10 +281,10 @@ getProcessBlocks diffusion nodeId desired checkpoints = do
     case OldestFirst <$> nonEmpty (getOldestFirst result) of
       Nothing -> do
           let msg = sformat ("getProcessBlocks: diffusion returned []"%
-                             " on request to fetch "%shortHashF%" from peer "%build)
+                             " on request to fetch "%shortHeaderHashF%" from peer "%build)
                             desired nodeId
           throwM $ DialogUnexpected msg
-      Just (blocks :: OldestFirst NE Block) -> do
+      Just (blocks :: OldestFirst NE (Block 'AttrExtRep)) -> do
           recHeaderVar <- view (lensOf @RecoveryHeaderTag)
           logDebug $ sformat
               ("Retrieved "%int%" blocks")

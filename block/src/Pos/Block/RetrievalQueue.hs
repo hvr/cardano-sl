@@ -18,7 +18,8 @@ import           Pos.Network.Types (NodeId)
 data BlockRetrievalTask = BlockRetrievalTask
     { brtHeader    :: !(BlockHeader 'AttrExtRep)
       -- ^ Header we're insterested in together with external, i.e.
-      -- @'ByteString'@ representations.
+      -- @'ByteString'@ representations.  It is required since block hash
+      -- verification is postponed untill `BlockRetrievalTask` is handled.
     , brtContinues :: !Bool
       -- ^ If it was tentatively classified as "direct continuation of
       -- our chain".
@@ -27,4 +28,4 @@ data BlockRetrievalTask = BlockRetrievalTask
 data BlockRetrievalQueueTag
 
 -- | Queue types.
-type BlockRetrievalQueue attr = TBQueue (NodeId, BlockRetrievalTask)
+type BlockRetrievalQueue = TBQueue (NodeId, BlockRetrievalTask)

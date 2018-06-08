@@ -4,6 +4,7 @@ module Pos.DB.Block.Load
        (
        -- * Load data
          loadBlundsWhile
+       , loadBlundsWithExtRepWhile
        , loadBlundsByDepth
        , loadBlocksWhile
        , loadHeadersWhile
@@ -11,6 +12,7 @@ module Pos.DB.Block.Load
 
        -- * Load data from tip
        , loadBlundsFromTipWhile
+       , loadBlundsWithExtRepFromTipWhile
        , loadBlundsFromTipByDepth
        ) where
 
@@ -19,14 +21,14 @@ import           Universum
 import           Control.Lens (_Wrapped)
 import           Formatting (sformat, (%))
 
+import           Pos.Binary.Class (DecoderAttrKind (..))
 import           Pos.Binary.Core ()
 import           Pos.Block.Types (Blund)
 import           Pos.Core (BlockCount, HasDifficulty (difficultyL),
                            HasPrevBlock (prevBlockL), HeaderHash, HasGenesisHash)
-import           Pos.Core.Block (Block, BlockHeader)
-import           Pos.Core.Configuration (genesisHash)
-import           Pos.Crypto (shortHashF)
-import           Pos.DB.Block (getBlund)
+import           Pos.Core.Block (Block, BlockHeader, shortHeaderHashF)
+import           Pos.Core.Configuration (genesisHeaderHash)
+import           Pos.DB.Block (getBlund, getBlundWithExtRep)
 import           Pos.DB.BlockIndex (getHeader)
 import           Pos.DB.Class (MonadBlockDBRead, MonadDBRead, getBlock)
 import           Pos.DB.Error (DBError (..))
@@ -53,7 +55,7 @@ loadDataWhile getter predicate start = NewestFirst <$> doIt [] start
   where
     doIt :: [a] -> HeaderHash -> m [a]
     doIt !acc h
-        | h == genesisHash = pure (reverse acc)
+        | h == genesisHeaderHash = pure (reverse acc)
         | otherwise = do
             d <- getter h
             let prev = d ^. prevBlockL
@@ -98,36 +100,41 @@ loadDataByDepth getter extraPredicate depth h = do
 -- and while @predicate@ is true.
 loadBlundsWhile
     :: MonadDBRead m
-    => (Block -> Bool) -> HeaderHash -> m (NewestFirst [] Blund)
+    => (Block 'AttrNone -> Bool) -> HeaderHash -> m (NewestFirst [] (Blund 'AttrNone))
 loadBlundsWhile predicate = loadDataWhile getBlundThrow (predicate . fst)
+
+loadBlundsWithExtRepWhile
+    :: MonadDBRead m
+    => (Block 'AttrExtRep -> Bool) -> HeaderHash -> m (NewestFirst [] (Blund 'AttrExtRep))
+loadBlundsWithExtRepWhile predicate = loadDataWhile getBlundWithExtRepThrow (predicate . fst)
 
 -- | Load blunds which have depth less than given (depth = number of
 -- blocks that will be returned).
 loadBlundsByDepth
     :: MonadDBRead m
-    => BlockCount -> HeaderHash -> m (NewestFirst [] Blund)
+    => BlockCount -> HeaderHash -> m (NewestFirst [] (Blund 'AttrNone))
 loadBlundsByDepth = loadDataByDepth getBlundThrow (const True)
 
 -- | Load blocks starting from block with header hash equal to given hash
 -- and while @predicate@ is true.
 loadBlocksWhile
     :: MonadBlockDBRead m
-    => (Block -> Bool) -> HeaderHash -> m (NewestFirst [] Block)
+    => (Block 'AttrNone  -> Bool) -> HeaderHash -> m (NewestFirst [] (Block 'AttrNone))
 loadBlocksWhile = loadDataWhile getBlockThrow
 
 -- | Load headers starting from block with header hash equal to given hash
 -- and while @predicate@ is true.
 loadHeadersWhile
     :: LoadHeadersMode m
-    => (BlockHeader -> Bool)
+    => (BlockHeader 'AttrNone -> Bool)
     -> HeaderHash
-    -> m (NewestFirst [] BlockHeader)
+    -> m (NewestFirst [] (BlockHeader 'AttrNone))
 loadHeadersWhile = loadDataWhile getHeaderThrow
 
 -- | Load headers which have depth less than given.
 loadHeadersByDepth
     :: LoadHeadersMode m
-    => BlockCount -> HeaderHash -> m (NewestFirst [] BlockHeader)
+    => BlockCount -> HeaderHash -> m (NewestFirst [] (BlockHeader 'AttrNone))
 loadHeadersByDepth = loadDataByDepth getHeaderThrow (const True)
 
 ----------------------------------------------------------------------------
@@ -138,14 +145,19 @@ loadHeadersByDepth = loadDataByDepth getHeaderThrow (const True)
 -- true.
 loadBlundsFromTipWhile
     :: MonadDBRead m
-    => (Block -> Bool) -> m (NewestFirst [] Blund)
+    => (Block 'AttrNone -> Bool) -> m (NewestFirst [] (Blund 'AttrNone))
 loadBlundsFromTipWhile condition = getTip >>= loadBlundsWhile condition
+
+loadBlundsWithExtRepFromTipWhile
+    :: MonadDBRead m
+    => (Block 'AttrExtRep -> Bool) -> m (NewestFirst [] (Blund 'AttrExtRep))
+loadBlundsWithExtRepFromTipWhile condition = getTip >>= loadBlundsWithExtRepWhile condition
 
 -- | Load blunds from BlockDB starting from tip which have depth less than
 -- given.
 loadBlundsFromTipByDepth
     :: MonadDBRead m
-    => BlockCount -> m (NewestFirst [] Blund)
+    => BlockCount -> m (NewestFirst [] (Blund 'AttrNone))
 loadBlundsFromTipByDepth d = getTip >>= loadBlundsByDepth d
 
 ----------------------------------------------------------------------------
@@ -154,24 +166,32 @@ loadBlundsFromTipByDepth d = getTip >>= loadBlundsByDepth d
 
 getBlockThrow
     :: MonadBlockDBRead m
-    => HeaderHash -> m Block
+    => HeaderHash -> m (Block 'AttrNone)
 getBlockThrow hash =
     maybeThrow (DBMalformed $ sformat errFmt hash) =<< getBlock hash
   where
-    errFmt = "getBlockThrow: no block with HeaderHash: "%shortHashF
+    errFmt = "getBlockThrow: no block with HeaderHash: "%shortHeaderHashF
 
 getHeaderThrow
     :: LoadHeadersMode m
-    => HeaderHash -> m BlockHeader
+    => HeaderHash -> m (BlockHeader 'AttrNone)
 getHeaderThrow hash =
     maybeThrow (DBMalformed $ sformat errFmt hash) =<< getHeader hash
   where
-    errFmt = "getBlockThrow: no block header with hash: "%shortHashF
+    errFmt = "getBlockThrow: no block header with hash: "%shortHeaderHashF
 
 getBlundThrow
     :: MonadDBRead m
-    => HeaderHash -> m Blund
+    => HeaderHash -> m (Blund 'AttrNone)
 getBlundThrow hash =
     maybeThrow (DBMalformed $ sformat errFmt hash) =<< getBlund hash
   where
-    errFmt = "getBlundThrow: no blund with HeaderHash: "%shortHashF
+    errFmt = "getBlundThrow: no blund with HeaderHash: "%shortHeaderHashF
+
+getBlundWithExtRepThrow
+    :: MonadDBRead m
+    => HeaderHash -> m (Blund 'AttrExtRep)
+getBlundWithExtRepThrow hash =
+    maybeThrow (DBMalformed $ sformat errFmt hash) =<< getBlundWithExtRep hash
+  where
+    errFmt = "getBlundWithExtRepThrow: no blund with HeaderHash: "%shortHeaderHashF

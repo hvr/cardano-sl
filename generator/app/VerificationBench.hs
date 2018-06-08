@@ -17,7 +17,7 @@ import           System.Wlog (LoggerName (..), LoggerConfig, consoleActionB, deb
 import           Mockable.CurrentTime (realTime)
 
 import           Pos.AllSecrets (mkAllSecretsSimple)
-import           Pos.Binary.Class (serialize, decodeFull)
+import           Pos.Binary.Class (Bi (..), serialize, decodeFull)
 import           Pos.Block.Error (ApplyBlocksException, VerifyBlocksException)
 import           Pos.Block.Logic.VAR (getVerifyBlocksContext', verifyAndApplyBlocks, verifyBlocksPrefix, rollbackBlocks)
 import           Pos.Core (Block)
@@ -147,7 +147,7 @@ writeBlocks path bs = do
 readBlocks :: FilePath -> IO (Maybe (OldestFirst NE Block))
 readBlocks path = do
     sbs <- BSL.readFile path
-    case decodeFull sbs of
+    case decodeFull decode label sbs of
         Left err -> do
             putStrLn err
             return Nothing

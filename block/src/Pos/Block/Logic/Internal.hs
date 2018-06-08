@@ -149,7 +149,7 @@ applyBlocksUnsafe
     => BlockVersion
     -> BlockVersionData
     -> ShouldCallBListener
-    -> OldestFirst NE Blund
+    -> OldestFirst NE (Blund attr)
     -> Maybe PollModifier
     -> m ()
 applyBlocksUnsafe bv bvd scb blunds pModifier = do
@@ -182,7 +182,7 @@ applyBlocksDbUnsafeDo
     => BlockVersion
     -> BlockVersionData
     -> ShouldCallBListener
-    -> OldestFirst NE Blund
+    -> OldestFirst NE (Blund attr)
     -> Maybe PollModifier
     -> m ()
 applyBlocksDbUnsafeDo bv bvd scb blunds pModifier = do
@@ -212,7 +212,7 @@ rollbackBlocksUnsafe
     :: MonadBlockApply ctx m
     => BypassSecurityCheck -- ^ is rollback for more than k blocks allowed?
     -> ShouldCallBListener
-    -> NewestFirst NE Blund
+    -> NewestFirst NE (Blund attr)
     -> m ()
 rollbackBlocksUnsafe bsc scb toRollback = do
     slogRoll <- slogRollbackBlocks bsc scb toRollback
@@ -240,28 +240,28 @@ rollbackBlocksUnsafe bsc scb toRollback = do
     sanityCheckDB
 
 
-toComponentBlock :: (MainBlock -> payload) -> Block -> ComponentBlock payload
+toComponentBlock :: (MainBlock attr -> payload) -> Block attr -> ComponentBlock payload
 toComponentBlock fnc block = case block of
     Left genBlock   -> ComponentBlockGenesis (convertGenesis genBlock)
     Right mainBlock -> ComponentBlockMain (Some $ mainBlock ^. gbHeader) (fnc mainBlock)
 
-toTxpBlock :: Block -> TxpBlock
+toTxpBlock :: Block attr -> TxpBlock
 toTxpBlock = toComponentBlock (view mainBlockTxPayload)
 
-toUpdateBlock :: Block -> UpdateBlock
+toUpdateBlock :: Block attr -> UpdateBlock
 toUpdateBlock = toComponentBlock (view mainBlockUpdatePayload)
 
-toTxpBlund :: Blund -> TxpBlund
+toTxpBlund :: Blund attr -> TxpBlund
 toTxpBlund = bimap toTxpBlock undoTx
 
-toSscBlock :: Block -> SscBlock
+toSscBlock :: Block attr -> SscBlock
 toSscBlock = toComponentBlock (view mainBlockSscPayload)
 
-toDlgBlund :: Blund -> DlgBlund
+toDlgBlund :: Blund attr -> DlgBlund
 toDlgBlund = bimap toDlgBlock undoDlg
   where
-    toDlgBlock :: Block -> DlgBlock
+    toDlgBlock :: Block attr -> DlgBlock
     toDlgBlock = toComponentBlock (view mainBlockDlgPayload)
 
-convertGenesis :: GenesisBlock -> Some IsGenesisHeader
+convertGenesis :: GenesisBlock attr -> Some IsGenesisHeader
 convertGenesis = Some . view gbHeader
