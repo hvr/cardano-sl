@@ -13,16 +13,15 @@ module Pos.Core.Block.Constructors
 
 import           Universum
 
-import           Pos.Binary.Core.Blockchain () -- Bi instances
+import           Pos.Binary.Core.Blockchain ()
 import           Pos.Core.Block.Blockchain (GenericBlock (..), mkGenericHeader)
 import           Pos.Core.Block.Genesis (GenesisBody (..), GenesisConsensusData (..),
                                          GenesisExtraBodyData (..), GenesisExtraHeaderData (..))
 import           Pos.Core.Block.Main (MainBody (..), MainExtraBodyData (..),
                                       MainExtraHeaderData (..))
 import           Pos.Core.Block.Union (BlockHeader, BlockSignature (..), GenesisBlock,
-                                       GenesisBlockHeader, HeaderHash, MainBlock,
-                                       MainBlockHeader, MainConsensusData (..), MainToSign (..),
-                                       headerHash)
+                                       GenesisBlockHeader, HeaderHash, MainBlock, MainBlockHeader,
+                                       MainConsensusData (..), MainToSign (..), headerHash)
 import           Pos.Core.Common (ChainDifficulty, HasDifficulty (..), SlotLeaders)
 import           Pos.Core.Configuration (GenesisHash (..))
 import           Pos.Core.Delegation.HeavyDlgIndex (ProxySKBlockInfo)

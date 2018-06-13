@@ -12,10 +12,9 @@ import           Pos.SafeCopy ()
 
 import           Test.Pos.Binary.Helpers (safeCopyTest)
 import           Test.Pos.Block.Arbitrary ()
-import           Test.Pos.Configuration (withDefConfiguration)
 
 spec :: Spec
-spec = withDefConfiguration $ \_ -> describe "Block types" $ do
+spec = describe "Block types" $ do
     describe "SafeCopy instances" $ do
         describe "GenericBlockHeader" $ do
             describe "GenesisBlockHeader" $ do

@@ -31,7 +31,7 @@ type BenchmarkTestParams = (ExplorerTestParams, ExtraContext)
 -- | @getBlocksTotal@ function for benchmarks.
 getBlocksTotalBench :: BenchmarkTestParams -> IO Integer
 getBlocksTotalBench (testParams, extraContext) =
-    withDefConfigurations $ const . const $ runExplorerTestMode
+    withDefConfigurations $ const $ runExplorerTestMode
         testParams
         extraContext
         getBlocksTotal
@@ -60,7 +60,7 @@ generateTestParams totalBlocksNumber slotsPerEpoch = do
 
     -- The extra context so we can mock the functions.
     let extraContext :: ExtraContext
-        extraContext = withDefConfigurations $ const . const $ makeMockExtraCtx mode
+        extraContext = withDefConfigurations $ const $ makeMockExtraCtx mode
 
     pure (testParams, extraContext)
   where

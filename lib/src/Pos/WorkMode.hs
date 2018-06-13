@@ -36,18 +36,15 @@ import           Pos.DB.Rocks (dbDeleteDefault, dbGetDefault, dbIterSourceDefaul
 import           Pos.Delegation.Class (DelegationVar)
 import           Pos.Infra.DHT.Real.Param (KademliaParams)
 import           Pos.Infra.Network.Types (HasNodeType (..), getNodeTypeDefault)
-import           Pos.Infra.Reporting (HasMisbehaviorMetrics (..),
-                                      MonadReporting (..), Reporter (..))
+import           Pos.Infra.Reporting (HasMisbehaviorMetrics (..), MonadReporting (..),
+                                      Reporter (..))
 import           Pos.Infra.Shutdown (HasShutdownContext (..))
 import           Pos.Infra.Slotting.Class (MonadSlots (..))
-import           Pos.Infra.Slotting.Impl (currentTimeSlottingSimple,
-                                          getCurrentSlotBlockingSimple,
-                                          getCurrentSlotInaccurateSimple,
-                                          getCurrentSlotSimple)
-import           Pos.Infra.Slotting.MemState (HasSlottingVar (..),
-                                              MonadSlotsData)
-import           Pos.Infra.Util.JsonLog.Events (HasJsonLogConfig (..),
-                                                JsonLogConfig, jsonLogDefault)
+import           Pos.Infra.Slotting.Impl (currentTimeSlottingSimple, getCurrentSlotBlockingSimple,
+                                          getCurrentSlotInaccurateSimple, getCurrentSlotSimple)
+import           Pos.Infra.Slotting.MemState (HasSlottingVar (..), MonadSlotsData)
+import           Pos.Infra.Util.JsonLog.Events (HasJsonLogConfig (..), JsonLogConfig,
+                                                jsonLogDefault)
 import           Pos.Infra.Util.TimeWarp (CanJsonLog (..))
 import           Pos.Ssc.Mem (SscMemTag)
 import           Pos.Ssc.Types (SscState)
@@ -146,9 +143,7 @@ instance {-# OVERLAPPING #-} HasLoggerName (RealMode ext) where
 instance {-# OVERLAPPING #-} CanJsonLog (RealMode ext) where
     jsonLog = jsonLogDefault
 
-instance (HasConfiguration, MonadSlotsData ctx (RealMode ext))
-      => MonadSlots ctx (RealMode ext)
-  where
+instance MonadSlotsData ctx (RealMode ext) => MonadSlots ctx (RealMode ext) where
     getCurrentSlot = getCurrentSlotSimple
     getCurrentSlotBlocking = getCurrentSlotBlockingSimple
     getCurrentSlotInaccurate = getCurrentSlotInaccurateSimple

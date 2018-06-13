@@ -25,9 +25,8 @@ import           Pos.Block.Logic (applyBlocksUnsafe)
 import qualified Pos.Block.Lrc as Lrc
 import           Pos.Block.Slog (ShouldCallBListener (..))
 import           Pos.Core (Coin, EpochIndex, GenesisData (..), GenesisInitializer (..),
-                           StakeholderId, TestnetBalanceOptions (..), addressHash, blkSecurityParam,
-                           coinF, epochSlots, genesisData, genesisSecretKeysPoor,
-                           genesisSecretKeysRich)
+                           StakeholderId, TestnetBalanceOptions (..), addressHash, coinF,
+                           genesisData, genesisSecretKeysPoor, genesisSecretKeysRich)
 import           Pos.Core.Block (mainBlockTxPayload)
 import           Pos.Core.Txp (TxAux, mkTxPayload)
 import           Pos.Crypto (SecretKey, toPublic)
@@ -41,6 +40,7 @@ import           Test.Pos.Block.Logic.Util (EnableTxPayload (..), InplaceDB (..)
                                             bpGenBlocks)
 import           Test.Pos.Block.Property (blockPropertySpec)
 import           Test.Pos.Configuration (defaultTestBlockVersionData, withStaticConfigurations)
+import           Test.Pos.Core.Dummy (dummyEpochSlots, dummyK, dummyProtocolConstants)
 import           Test.Pos.Crypto.Dummy (dummyProtocolMagic)
 import           Test.Pos.Util.QuickCheck (maybeStopProperty, stopProperty)
 
@@ -117,16 +117,14 @@ genGenesisInitializer = do
 
 lrcCorrectnessProp :: HasConfigurations => BlockProperty ()
 lrcCorrectnessProp = do
-    let k = blkSecurityParam
     -- This value is how many blocks we need to generate first. We
     -- want to generate blocks for all slots which will be considered
     -- in LRC except the last one, because we want to include some
     -- special transactions into it.  We don't use 'crucialSlot' or
     -- anything similar, because we don't want to rely on the code,
     -- but rather want to use our knowledge.
-    let blkCount0 = 8 * k - 1
-    () <$ bpGenBlocks dummyProtocolMagic
-                      (Just blkCount0)
+    let blkCount0 = 8 * dummyK - 1
+    () <$ bpGenBlocks (Just blkCount0)
                       (EnableTxPayload False)
                       (InplaceDB True)
     genAndApplyBlockFixedTxs =<< txsBeforeBoundary
@@ -140,12 +138,11 @@ lrcCorrectnessProp = do
     -- We need to have at least 'k' blocks after the boundary to make
     -- sure that stable blocks are indeed stable. Note that we have
     -- already applied 1 blocks, hence 'pred'.
-    blkCount1 <- pred <$> pick (choose (k, 2 * k))
-    () <$ bpGenBlocks dummyProtocolMagic
-                      (Just blkCount1)
+    blkCount1 <- pred <$> pick (choose (dummyK, 2 * dummyK))
+    () <$ bpGenBlocks (Just blkCount1)
                       (EnableTxPayload False)
                       (InplaceDB True)
-    lift $ Lrc.lrcSingleShot dummyProtocolMagic 1
+    lift $ Lrc.lrcSingleShot dummyProtocolMagic dummyProtocolConstants 1
     leaders1 <-
         maybeStopProperty "No leaders for epoch#1!" =<< lift (Lrc.getLeadersForEpoch 1)
     -- Here we use 'genesisSeed' (which is the seed for the 0-th
@@ -157,7 +154,7 @@ lrcCorrectnessProp = do
     -- DB iteration.
     let sortedStakes = sortOn (serialize' . fst) (HM.toList stableStakes)
     let expectedLeadersStakes =
-            Lrc.followTheSatoshi epochSlots genesisSeed sortedStakes
+            Lrc.followTheSatoshi dummyEpochSlots genesisSeed sortedStakes
     when (expectedLeadersStakes /= leaders1) $
         stopProperty $ sformat ("expectedLeadersStakes /= leaders1\n"%
                                 "Stakes version: "%listJson%
@@ -237,11 +234,10 @@ checkRichmen = do
 genAndApplyBlockFixedTxs :: HasConfigurations => [TxAux] -> BlockProperty ()
 genAndApplyBlockFixedTxs txs = do
     let txPayload = mkTxPayload txs
-    emptyBlund <- bpGenBlock dummyProtocolMagic
-                             (EnableTxPayload False)
-                             (InplaceDB False)
+    emptyBlund <- bpGenBlock (EnableTxPayload False) (InplaceDB False)
     let blund = emptyBlund & _1 . _Right . mainBlockTxPayload .~ txPayload
     lift $ applyBlocksUnsafe dummyProtocolMagic
+                             dummyProtocolConstants
                              (ShouldCallBListener False)
                              (one blund)
                              Nothing
@@ -268,33 +264,32 @@ txsAfterBoundary = pure []
 -- Less than `k` blocks test.
 ----------------------------------------------------------------------------
 
-lessThanKAfterCrucialProp
-    :: HasConfigurations => BlockProperty ()
+lessThanKAfterCrucialProp :: HasConfigurations => BlockProperty ()
 lessThanKAfterCrucialProp = do
-    let k = blkSecurityParam
     -- We need to generate '8 * k' blocks for first '8 * k' slots.
-    let inFirst8K = 8 * k
+    let inFirst8K = 8 * dummyK
     -- And then we need to generate random number of blocks in range
     -- '[0 .. 2 * k]'.
-    inLast2K <- pick (choose (0, 2 * k))
-    let toGenerate = inFirst8K + inLast2K
+    inLast2K <- pick (choose (0, 2 * dummyK))
+    let toGenerate    = inFirst8K + inLast2K
     -- LRC should succeed iff number of blocks in last '2 * k' slots is
     -- at least 'k'.
-    let shouldSucceed = inLast2K >= k
-    () <$ bpGenBlocks dummyProtocolMagic
-                      (Just toGenerate)
-                      (EnableTxPayload False)
-                      (InplaceDB True)
+    let shouldSucceed = inLast2K >= dummyK
+    () <$ bpGenBlocks (Just toGenerate) (EnableTxPayload False) (InplaceDB True)
     let mkFormat expectedOutcome =
-            ("We expected LRC to " %expectedOutcome % " because there are " %int %
-             " blocks after crucial slot, but it failed")
-    let unexpectedFailMsg = sformat (mkFormat "succeed") inLast2K
+            ( "We expected LRC to "
+            % expectedOutcome
+            % " because there are "
+            % int
+            % " blocks after crucial slot, but it failed"
+            )
+    let unexpectedFailMsg    = sformat (mkFormat "succeed") inLast2K
     let unexpectedSuccessMsg = sformat (mkFormat "fail") inLast2K
-    lift (try $ Lrc.lrcSingleShot dummyProtocolMagic 1) >>= \case
-        Left Lrc.UnknownBlocksForLrc
-            | shouldSucceed -> stopProperty unexpectedFailMsg
-            | otherwise -> pass
-        Left e -> lift (throwM e)
-        Right ()
-            | shouldSucceed -> pass
-            | otherwise -> stopProperty unexpectedSuccessMsg
+    lift (try $ Lrc.lrcSingleShot dummyProtocolMagic dummyProtocolConstants 1)
+        >>= \case
+                Left Lrc.UnknownBlocksForLrc
+                    | shouldSucceed -> stopProperty unexpectedFailMsg
+                    | otherwise     -> pass
+                Left e -> lift (throwM e)
+                Right () | shouldSucceed -> pass
+                         | otherwise     -> stopProperty unexpectedSuccessMsg

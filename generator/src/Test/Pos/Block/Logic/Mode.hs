@@ -61,11 +61,9 @@ import           Pos.AllSecrets (AllSecrets (..), HasAllSecrets (..), mkAllSecre
 import           Pos.Block.BListener (MonadBListener (..), onApplyBlocksStub, onRollbackBlocksStub)
 import           Pos.Block.Slog (HasSlogGState (..), mkSlogGState)
 import           Pos.Core (BlockVersionData, CoreConfiguration (..), GenesisConfiguration (..),
-                           GenesisInitializer (..), GenesisSpec (..), HasConfiguration,
-                           HasProtocolConstants, SlotId, Timestamp (..), genesisSecretKeys,
-                           epochSlots, withGenesisSpec)
+                           GenesisInitializer (..), GenesisSpec (..), HasConfiguration, SlotId,
+                           Timestamp (..), genesisSecretKeys, withGenesisSpec)
 import           Pos.Core.Configuration (HasGenesisBlockVersionData, withGenesisBlockVersionData)
-import           Pos.Crypto (ProtocolMagic)
 import           Pos.DB (DBPure, MonadDB (..), MonadDBRead (..), MonadGState (..))
 import qualified Pos.DB as DB
 import qualified Pos.DB.Block as DB
@@ -102,6 +100,7 @@ import           Pos.WorkMode (EmptyMempoolExt)
 import           Test.Pos.Block.Logic.Emulation (Emulation (..), runEmulation, sudoLiftIO)
 import           Test.Pos.Configuration (defaultTestBlockVersionData, defaultTestConf,
                                          defaultTestGenesisSpec)
+import           Test.Pos.Core.Dummy (dummyEpochSlots, dummyProtocolConstants)
 import           Test.Pos.Crypto.Dummy (dummyProtocolMagic)
 
 ----------------------------------------------------------------------------
@@ -155,16 +154,16 @@ genGenesisInitializer = do
 
 -- This function creates 'CoreConfiguration' from 'TestParams' and
 -- uses it to satisfy 'HasConfiguration'.
-withTestParams :: TestParams -> (HasConfiguration => ProtocolMagic -> r) -> r
-withTestParams TestParams {..} = withGenesisSpec _tpStartTime coreConfiguration
+withTestParams :: TestParams -> (HasConfiguration => r) -> r
+withTestParams TestParams {..} f =
+    withGenesisSpec _tpStartTime coreConfiguration $ \_ _ -> f
   where
     defaultCoreConf :: CoreConfiguration
     defaultCoreConf = ccCore defaultTestConf
     coreConfiguration :: CoreConfiguration
-    coreConfiguration = defaultCoreConf {ccGenesis = GCSpec genesisSpec}
-    genesisSpec =
-        defaultTestGenesisSpec
-        { gsInitializer = _tpGenesisInitializer
+    coreConfiguration = defaultCoreConf { ccGenesis = GCSpec genesisSpec }
+    genesisSpec       = defaultTestGenesisSpec
+        { gsInitializer      = _tpGenesisInitializer
         , gsBlockVersionData = _tpBlockVersionData
         }
 
@@ -241,7 +240,7 @@ initBlockTestContext tp@TestParams {..} callback = do
     (futureLrcCtx, putLrcCtx) <- newInitFuture "lrcCtx"
     (futureSlottingVar, putSlottingVar) <- newInitFuture "slottingVar"
     systemStart <- Timestamp <$> currentTime
-    slottingState <- mkSimpleSlottingStateVar
+    slottingState <- mkSimpleSlottingStateVar dummyEpochSlots
     let initCtx =
             TestInitModeContext
                 dbPureVar
@@ -250,15 +249,15 @@ initBlockTestContext tp@TestParams {..} callback = do
                 systemStart
                 futureLrcCtx
         initBlockTestContextDo = do
-            initNodeDBs dummyProtocolMagic epochSlots
+            initNodeDBs dummyProtocolMagic dummyProtocolConstants
             _gscSlottingVar <- newTVarIO =<< GS.getSlottingData
             putSlottingVar _gscSlottingVar
             let btcLoggerName = "testing"
             lcLrcSync <- mkLrcSyncData >>= newTVarIO
             let _gscLrcContext = LrcContext {..}
             putLrcCtx _gscLrcContext
-            btcUpdateContext <- mkUpdateContext
-            btcSscState <- mkSscState
+            btcUpdateContext <- mkUpdateContext dummyEpochSlots
+            btcSscState <- mkSscState dummyEpochSlots
             _gscSlogGState <- mkSlogGState
             btcTxpMem <- mkTxpLocalData
             let btcTxpGlobalSettings = txpGlobalSettings dummyProtocolMagic
@@ -313,9 +312,8 @@ blockPropertyToProperty
     -> (HasConfiguration => BlockProperty a)
     -> Property
 blockPropertyToProperty tpGen blockProperty =
-    forAll tpGen $ \tp ->
-        withTestParams tp $ \_ ->
-        monadic (ioProperty . runBlockTestMode tp) blockProperty
+    forAll tpGen $ \tp -> withTestParams tp
+        $ monadic (ioProperty . runBlockTestMode tp) blockProperty
 
 -- | Simplified version of 'blockPropertyToProperty' which uses
 -- 'Arbitrary' instance to generate 'TestParams'.
@@ -364,9 +362,7 @@ instance HasConfiguration => MonadDB TestInitMode where
     dbDelete = DB.dbDeletePureDefault
     dbPutSerBlunds = DB.dbPutSerBlundsPureDefault
 
-instance (HasConfiguration, MonadSlotsData ctx TestInitMode)
-      => MonadSlots ctx TestInitMode
-  where
+instance MonadSlotsData ctx TestInitMode => MonadSlots ctx TestInitMode where
     getCurrentSlot           = getCurrentSlotSimple
     getCurrentSlotBlocking   = getCurrentSlotBlockingSimple
     getCurrentSlotInaccurate = getCurrentSlotInaccurateSimple
@@ -465,23 +461,26 @@ testSlottingHelper targetF alternative = do
         Nothing   -> targetF btcSSlottingStateVar
         Just slot -> pure $ alternative slot
 
-getCurrentSlotTestDefault :: (TestSlottingContext ctx m, HasProtocolConstants) => m (Maybe SlotId)
-getCurrentSlotTestDefault = testSlottingHelper getCurrentSlotSimple' Just
+getCurrentSlotTestDefault :: TestSlottingContext ctx m => m (Maybe SlotId)
+getCurrentSlotTestDefault =
+    testSlottingHelper (getCurrentSlotSimple' dummyEpochSlots) Just
 
-getCurrentSlotBlockingTestDefault :: (TestSlottingContext ctx m, HasProtocolConstants) => m SlotId
-getCurrentSlotBlockingTestDefault = testSlottingHelper getCurrentSlotBlockingSimple' identity
+getCurrentSlotBlockingTestDefault :: TestSlottingContext ctx m => m SlotId
+getCurrentSlotBlockingTestDefault =
+    testSlottingHelper (getCurrentSlotBlockingSimple' dummyEpochSlots) identity
 
-getCurrentSlotInaccurateTestDefault :: (TestSlottingContext ctx m, HasProtocolConstants) => m SlotId
-getCurrentSlotInaccurateTestDefault = testSlottingHelper getCurrentSlotInaccurateSimple' identity
+getCurrentSlotInaccurateTestDefault :: TestSlottingContext ctx m => m SlotId
+getCurrentSlotInaccurateTestDefault = testSlottingHelper
+    (getCurrentSlotInaccurateSimple' dummyEpochSlots)
+    identity
 
 currentTimeSlottingTestDefault :: SimpleSlottingMode ctx m => m Timestamp
 currentTimeSlottingTestDefault = currentTimeSlottingSimple
 
-instance (HasConfiguration, MonadSlotsData ctx BlockTestMode)
-        => MonadSlots ctx BlockTestMode where
-    getCurrentSlot = getCurrentSlotTestDefault
-    getCurrentSlotBlocking = getCurrentSlotBlockingTestDefault
-    getCurrentSlotInaccurate = getCurrentSlotInaccurateTestDefault
+instance MonadSlotsData ctx BlockTestMode => MonadSlots ctx BlockTestMode where
+    getCurrentSlot = const getCurrentSlotTestDefault
+    getCurrentSlotBlocking = const getCurrentSlotBlockingTestDefault
+    getCurrentSlotInaccurate = const getCurrentSlotInaccurateTestDefault
     currentTimeSlotting = currentTimeSlottingTestDefault
 
 instance HasConfiguration => MonadDBRead BlockTestMode where

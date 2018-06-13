@@ -37,7 +37,7 @@ import           Pos.Block.Slog (HasSlogGState (..))
 import           Pos.Client.Txp.Addresses (MonadAddresses (..))
 import           Pos.Configuration (HasNodeConfiguration)
 import           Pos.Core (Address, GenesisWStakeholders (..), HasConfiguration, HasPrimaryKey (..),
-                           SlotId (..), Timestamp, epochOrSlotToSlot, getEpochOrSlot,
+                           SlotCount, SlotId (..), Timestamp, epochOrSlotToSlot, getEpochOrSlot,
                            largestPubKeyAddressBoot)
 import           Pos.Crypto (SecretKey)
 import           Pos.DB (DBSum, MonadDB, MonadDBRead)
@@ -52,10 +52,9 @@ import           Pos.Generator.Block.Param (BlockGenParams (..), HasBlockGenPara
                                             HasTxGenParams (..))
 import qualified Pos.GState as GS
 import           Pos.Infra.Network.Types (HasNodeType (..), NodeType (..))
-import           Pos.Infra.Reporting (MonadReporting (..),
-                                      HasMisbehaviorMetrics (..))
-import           Pos.Infra.Slotting (HasSlottingVar (..), MonadSlots (..),
-                                     MonadSlotsData, currentTimeSlottingSimple)
+import           Pos.Infra.Reporting (HasMisbehaviorMetrics (..), MonadReporting (..))
+import           Pos.Infra.Slotting (HasSlottingVar (..), MonadSlots (..), MonadSlotsData,
+                                     currentTimeSlottingSimple)
 import           Pos.Infra.Slotting.Types (SlottingData)
 import           Pos.Lrc (HasLrcContext, LrcContext (..))
 import           Pos.Ssc (HasSscConfiguration, SscMemTag, SscState, mkSscState)
@@ -154,13 +153,12 @@ instance MonadThrow m => MonadThrow (RandT g m) where
 -- context. Persistent data (DB) is cloned. Other mutable data is
 -- recreated.
 mkBlockGenContext
-    :: forall ext ctx m.
-       ( MonadBlockGenInit ctx m
-       , Default ext
-       )
-    => BlockGenParams
+    :: forall ext ctx m
+     . (MonadBlockGenInit ctx m, Default ext)
+    => SlotCount
+    -> BlockGenParams
     -> m (BlockGenContext ext)
-mkBlockGenContext bgcParams@BlockGenParams{..} = do
+mkBlockGenContext epochSlots bgcParams@BlockGenParams{..} = do
     let bgcPrimaryKey = error "bgcPrimaryKey was forced before being set"
     bgcGState <- if _bgpInplaceDB
                  then view GS.gStateContext
@@ -180,8 +178,8 @@ mkBlockGenContext bgcParams@BlockGenParams{..} = do
     usingReaderT initCtx $ do
         tipEOS <- getEpochOrSlot <$> DB.getTipHeader
         putInitSlot (epochOrSlotToSlot tipEOS)
-        bgcSscState <- mkSscState
-        bgcUpdateContext <- mkUpdateContext
+        bgcSscState <- mkSscState epochSlots
+        bgcUpdateContext <- mkUpdateContext epochSlots
         bgcTxpMem <- mkTxpLocalData
         bgcDelegation <- mkDelegationVar
         return BlockGenContext {..}
@@ -225,10 +223,10 @@ instance MonadBlockGenBase m => MonadDB (InitBlockGenMode ext m) where
 instance (MonadBlockGenBase m, MonadSlotsData ctx (InitBlockGenMode ext m))
       => MonadSlots ctx (InitBlockGenMode ext m)
   where
-    getCurrentSlot           = Just <$> view ibgcSlot_L
-    getCurrentSlotBlocking   = view ibgcSlot_L
-    getCurrentSlotInaccurate = view ibgcSlot_L
-    currentTimeSlotting      = do
+    getCurrentSlot _           = Just <$> view ibgcSlot_L
+    getCurrentSlotBlocking _   = view ibgcSlot_L
+    getCurrentSlotInaccurate _ = view ibgcSlot_L
+    currentTimeSlotting        = do
         logWarning "currentTimeSlotting is used in initialization"
         currentTimeSlottingSimple
 
@@ -315,14 +313,14 @@ instance MonadBlockGenBase m => MonadDB (BlockGenMode ext m) where
 instance (MonadBlockGenBase m, MonadSlotsData ctx (BlockGenMode ext m))
       => MonadSlots ctx (BlockGenMode ext m)
   where
-    getCurrentSlot = view bgcSlotId_L
-    getCurrentSlotBlocking =
+    getCurrentSlot _ = view bgcSlotId_L
+    getCurrentSlotBlocking _ =
         view bgcSlotId_L >>= \case
             Nothing ->
                 reportFatalError
                     "getCurrentSlotBlocking is used in generator when slot is unknown"
             Just slot -> pure slot
-    getCurrentSlotInaccurate =
+    getCurrentSlotInaccurate _ =
         reportFatalError
             "It hardly makes sense to use 'getCurrentSlotInaccurate' during block generation"
     currentTimeSlotting = currentTimeSlottingSimple

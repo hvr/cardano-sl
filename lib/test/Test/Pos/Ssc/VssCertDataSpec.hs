@@ -18,8 +18,7 @@ import           Test.QuickCheck (Arbitrary (..), Gen, Property, choose, conjoin
 
 import           Pos.Arbitrary.Ssc ()
 import           Pos.Core (EpochIndex (..), EpochOrSlot (..), HasConfiguration, SlotId (..),
-                           VssCertificate (..), getCertId, getVssCertificatesMap, mkVssCertificate,
-                           slotSecurityParam)
+                           VssCertificate (..), getCertId, getVssCertificatesMap, mkVssCertificate)
 import           Pos.Core.Chrono (NewestFirst (..))
 import           Pos.Core.Slotting (flattenEpochOrSlot, unflattenSlotId)
 import           Pos.Ssc (SscGlobalState (..), VssCertData (..), delete, empty, expiryEoS, filter,
@@ -28,11 +27,12 @@ import           Pos.Ssc (SscGlobalState (..), VssCertData (..), delete, empty, 
 
 import           Test.Pos.Configuration (withDefConfiguration)
 import           Test.Pos.Core.Arbitrary ()
+import           Test.Pos.Core.Dummy (dummyEpochSlots, dummySlotSecurityParam)
 import           Test.Pos.Crypto.Dummy (dummyProtocolMagic)
 import           Test.Pos.Util.QuickCheck.Property (qcIsJust)
 
 spec :: Spec
-spec = withDefConfiguration $ \_ -> describe "Ssc.VssCertData" $ do
+spec = withDefConfiguration $ describe "Ssc.VssCertData" $ do
     describe "verifyInsertVssCertData" $
         prop description_verifyInsertVssCertData verifyInsertVssCertData
     describe "verifyDeleteVssCertData" $
@@ -176,14 +176,14 @@ instance HasConfiguration => Arbitrary RollbackData where
     arbitrary = do
         goodVssCertData@(VssCertData {..}) <- getVssCertData <$> arbitrary
         certsToRollbackN <- choose (0, 100) >>= choose . (0,)
-        slotsToRollback <- choose (1, slotSecurityParam)
-        let lastKEoSWord = flattenEpochOrSlot lastKnownEoS
+        slotsToRollback <- choose (1, dummySlotSecurityParam)
+        let lastKEoSWord = flattenEpochOrSlot dummyEpochSlots lastKnownEoS
             rollbackFrom = fromIntegral slotsToRollback + lastKEoSWord
             rollbackGen = do
                 sk <- arbitrary
                 binVssPK <- arbitrary
                 thisEpoch <-
-                    siEpoch . unflattenSlotId <$>
+                    siEpoch . unflattenSlotId dummyEpochSlots <$>
                         choose (succ lastKEoSWord, rollbackFrom)
                 return $ mkVssCertificate dummyProtocolMagic sk binVssPK thisEpoch
         certsToRollback <- nubOrdOn vcVssKey <$>
@@ -192,15 +192,14 @@ instance HasConfiguration => Arbitrary RollbackData where
                           lastKnownEoS
                           certsToRollback
 
-verifyRollback
-    :: HasConfiguration => RollbackData -> Gen Property
+verifyRollback :: HasConfiguration => RollbackData -> Gen Property
 verifyRollback (Rollback oldSscGlobalState rollbackEoS vssCerts) = do
     let certAdder vcd = foldl' (flip insert) vcd vssCerts
         newSscGlobalState@(SscGlobalState _ _ _ newVssCertData) =
             oldSscGlobalState & sgsVssCertificates %~ certAdder
     (_, SscGlobalState _ _ _ rolledVssCertData, _) <-
         runPureToss newSscGlobalState $
-        rollbackSsc rollbackEoS (NewestFirst [])
+        rollbackSsc dummyEpochSlots rollbackEoS (NewestFirst [])
     pure $ conjoin $ vssCerts <&> \cert ->
         let id = getCertId cert in
         counterexample ("haven't found cert with id " <>

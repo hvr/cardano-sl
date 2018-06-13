@@ -1,4 +1,3 @@
-
 -- | Base part of /follow-the-satoshi/ procedure.
 
 module Pos.Lrc.Fts
@@ -9,7 +8,7 @@ module Pos.Lrc.Fts
 import           Universum
 
 import           Control.Lens (makeLenses, makePrisms, uses)
-import           Data.Conduit (ConduitT, (.|), runConduitPure, await)
+import           Data.Conduit (ConduitT, await, runConduitPure, (.|))
 import qualified Data.Conduit.List as CL
 import           Data.List.NonEmpty (fromList)
 
@@ -224,7 +223,8 @@ previous upper bound (and thus it's more or equal to the current lower bound).
 -- specifies which addresses should count as “owning” funds for the purposes
 -- of follow-the-satoshi.
 followTheSatoshiM
-    :: forall m . (Monad m)
+    :: forall m
+     . Monad m
     => SlotCount
     -> SharedSeed
     -> Coin
@@ -275,7 +275,8 @@ followTheSatoshiM epochSlots (SharedSeed seed) totalCoins = do
 -- testing this pure version as a proxy for the one above is insufficient.
 -- The monadic version needs to be tested in conjunction with the same conduit
 -- source that will feed it values in the real system.
-followTheSatoshi :: SlotCount -> SharedSeed -> [(StakeholderId, Coin)] -> SlotLeaders
+followTheSatoshi
+    :: SlotCount -> SharedSeed -> [(StakeholderId, Coin)] -> SlotLeaders
 followTheSatoshi epochSlots seed stakes
     | totalCoins > coinToInteger maxBound =
         error $ sformat

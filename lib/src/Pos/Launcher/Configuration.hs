@@ -27,6 +27,7 @@ import           System.Wlog (WithLogger, logInfo)
 -- FIXME consistency on the locus of the JSON instances for configuration.
 -- Core keeps them separate, infra update and ssc define them on-site.
 import           Pos.Aeson.Core.Configuration ()
+import           Pos.Core (ProtocolConstants)
 import           Pos.Core.Slotting (Timestamp (..))
 import           Pos.Util.Config (parseYamlConfig)
 
@@ -105,7 +106,12 @@ instance Default ConfigurationOptions where
 withConfigurations
     :: (WithLogger m, MonadThrow m, MonadIO m)
     => ConfigurationOptions
-    -> (HasConfigurations => NtpConfiguration -> ProtocolMagic -> m r)
+    -> (  HasConfigurations
+       => NtpConfiguration
+       -> ProtocolMagic
+       -> ProtocolConstants
+       -> m r
+       )
     -> m r
 withConfigurations co@ConfigurationOptions{..} act = do
     logInfo ("using configurations: " <> show co)

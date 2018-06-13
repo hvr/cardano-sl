@@ -15,46 +15,76 @@ module Pos.Block.Network.Logic
 
 import           Universum
 
-import           Control.Concurrent.STM (isFullTBQueue, readTVar, writeTBQueue, writeTVar)
-import           Control.Exception (IOException)
-import           Control.Exception.Safe (Exception (..))
+import           Control.Concurrent.STM
+                       (isFullTBQueue, readTVar, writeTBQueue, writeTVar)
+import           Control.Exception
+                       (IOException)
+import           Control.Exception.Safe
+                       (Exception (..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as M
 import qualified Data.Text.Buildable as B
-import           Formatting (bprint, build, sformat, shown, stext, (%))
-import           Mockable (forConcurrently)
-import           Serokell.Util.Text (listJson)
+import           Formatting
+                       (bprint, build, sformat, shown, stext, (%))
+import           Mockable
+                       (forConcurrently)
+import           Serokell.Util.Text
+                       (listJson)
 import qualified System.Metrics.Gauge as Metrics
-import           System.Wlog (logDebug, logInfo, logWarning)
+import           System.Wlog
+                       (logDebug, logInfo, logWarning)
 
 import           Pos.Binary.Txp ()
-import           Pos.Block.BlockWorkMode (BlockWorkMode)
-import           Pos.Block.Error (ApplyBlocksException)
-import           Pos.Block.Logic (ClassifyHeaderRes (..), classifyNewHeader, lcaWithMainChain,
-                                  verifyAndApplyBlocks)
+import           Pos.Block.BlockWorkMode
+                       (BlockWorkMode)
+import           Pos.Block.Error
+                       (ApplyBlocksException)
+import           Pos.Block.Logic
+                       (ClassifyHeaderRes (..), classifyNewHeader,
+                       lcaWithMainChain, verifyAndApplyBlocks)
 import qualified Pos.Block.Logic as L
-import           Pos.Block.RetrievalQueue (BlockRetrievalQueue, BlockRetrievalQueueTag,
-                                           BlockRetrievalTask (..))
-import           Pos.Block.Types (Blund, LastKnownHeaderTag)
-import           Pos.Core (HasHeaderHash (..), HeaderHash, gbHeader, headerHashG, isMoreDifficult,
-                           prevBlockL)
-import           Pos.Core.Block (Block, BlockHeader, blockHeader)
-import           Pos.Core.Chrono (NE, NewestFirst (..), OldestFirst (..), _NewestFirst,
-                                  _OldestFirst)
-import           Pos.Crypto (ProtocolMagic, shortHashF)
+import           Pos.Block.RetrievalQueue
+                       (BlockRetrievalQueue, BlockRetrievalQueueTag,
+                       BlockRetrievalTask (..))
+import           Pos.Block.Types
+                       (Blund, LastKnownHeaderTag)
+import           Pos.Core
+                       (HasHeaderHash (..), HeaderHash, ProtocolConstants,
+                       SlotCount, gbHeader, headerHashG, isMoreDifficult,
+                       pcEpochSlots, prevBlockL)
+import           Pos.Core.Block
+                       (Block, BlockHeader, blockHeader)
+import           Pos.Core.Chrono
+                       (NE, NewestFirst (..), OldestFirst (..), _NewestFirst,
+                       _OldestFirst)
+import           Pos.Crypto
+                       (ProtocolMagic, shortHashF)
 import qualified Pos.DB.Block.Load as DB
-import           Pos.Exception (cardanoExceptionFromException, cardanoExceptionToException)
-import           Pos.Infra.Communication.Protocol (NodeId)
-import           Pos.Infra.Diffusion.Types (Diffusion)
-import qualified Pos.Infra.Diffusion.Types as Diffusion (Diffusion (announceBlockHeader, requestTip))
-import           Pos.Infra.Recovery.Info (recoveryInProgress)
-import           Pos.Infra.Reporting.MemState (HasMisbehaviorMetrics (..), MisbehaviorMetrics (..))
-import           Pos.Infra.StateLock (Priority (..), modifyStateLock)
-import           Pos.Infra.Util.JsonLog.Events (MemPoolModifyReason (..), jlAdoptedBlock)
-import           Pos.Infra.Util.TimeWarp (CanJsonLog (..))
-import           Pos.Util (buildListBounds, multilineBounds, _neLast)
-import           Pos.Util.AssertMode (inAssertMode)
-import           Pos.Util.Util (lensOf)
+import           Pos.Exception
+                       (cardanoExceptionFromException,
+                       cardanoExceptionToException)
+import           Pos.Infra.Communication.Protocol
+                       (NodeId)
+import           Pos.Infra.Diffusion.Types
+                       (Diffusion)
+import qualified Pos.Infra.Diffusion.Types as Diffusion
+                       (Diffusion (announceBlockHeader, requestTip))
+import           Pos.Infra.Recovery.Info
+                       (recoveryInProgress)
+import           Pos.Infra.Reporting.MemState
+                       (HasMisbehaviorMetrics (..), MisbehaviorMetrics (..))
+import           Pos.Infra.StateLock
+                       (Priority (..), modifyStateLock)
+import           Pos.Infra.Util.JsonLog.Events
+                       (MemPoolModifyReason (..), jlAdoptedBlock)
+import           Pos.Infra.Util.TimeWarp
+                       (CanJsonLog (..))
+import           Pos.Util
+                       (buildListBounds, multilineBounds, _neLast)
+import           Pos.Util.AssertMode
+                       (inAssertMode)
+import           Pos.Util.Util
+                       (lensOf)
 
 ----------------------------------------------------------------------------
 -- Exceptions
@@ -94,50 +124,51 @@ instance Exception BlockNetLogicException where
 -- progress and 'ncRecoveryHeader' is full, we'll be requesting blocks anyway
 -- and until we're finished we shouldn't be asking for new blocks.
 triggerRecovery
-    :: ( BlockWorkMode ctx m
-       )
-    => ProtocolMagic -> Diffusion m -> m ()
-triggerRecovery pm diffusion = unlessM recoveryInProgress $ do
-    logDebug "Recovery triggered, requesting tips from neighbors"
-    -- The 'catch' here is for an exception when trying to enqueue the request.
-    -- In 'requestTipsAndProcess', IO exceptions are caught, for each
-    -- individual request per-peer. Those are not re-thrown.
-    void requestTipsAndProcess `catch`
-        \(e :: SomeException) -> do
-           logDebug ("Error happened in triggerRecovery: " <> show e)
-           throwM e
-    logDebug "Finished requesting tips for recovery"
+    :: BlockWorkMode ctx m => ProtocolMagic -> SlotCount -> Diffusion m -> m ()
+triggerRecovery pm epochSlots diffusion =
+    unlessM (recoveryInProgress epochSlots) $ do
+        logDebug "Recovery triggered, requesting tips from neighbors"
+        -- The 'catch' here is for an exception when trying to enqueue the
+        -- request. In 'requestTipsAndProcess', IO exceptions are caught, for
+        -- each individual request per-peer. Those are not re-thrown.
+        void requestTipsAndProcess `catch` \(e :: SomeException) -> do
+            logDebug ("Error happened in triggerRecovery: " <> show e)
+            throwM e
+        logDebug "Finished requesting tips for recovery"
   where
     requestTipsAndProcess = do
         requestsMap <- Diffusion.requestTip diffusion
-        forConcurrently (M.toList requestsMap) $ \it@(nodeId, _) -> waitAndProcessOne it `catch`
+        forConcurrently (M.toList requestsMap) $ \it@(nodeId, _) ->
             -- Catch and squelch IOExceptions so that one failed request to one
             -- particlar peer does not stop the others.
-            \(e :: IOException) ->
-                logDebug $ sformat ("Error requesting tip from "%shown%": "%shown) nodeId e
+            waitAndProcessOne it `catch` \(e :: IOException) ->
+                logDebug $ sformat
+                    ("Error requesting tip from " % shown % ": " % shown)
+                    nodeId
+                    e
     waitAndProcessOne (nodeId, mbh) = do
         -- 'mbh' is an 'm' term that returns when the header has been
         -- downloaded.
         bh <- mbh
         -- I know, it's not unsolicited. TODO rename.
-        handleUnsolicitedHeader pm bh nodeId
+        handleUnsolicitedHeader pm epochSlots bh nodeId
 
 ----------------------------------------------------------------------------
 -- Headers processing
 ----------------------------------------------------------------------------
 
 handleUnsolicitedHeader
-    :: ( BlockWorkMode ctx m
-       )
+    :: BlockWorkMode ctx m
     => ProtocolMagic
+    -> SlotCount
     -> BlockHeader
     -> NodeId
     -> m ()
-handleUnsolicitedHeader pm header nodeId = do
+handleUnsolicitedHeader pm epochSlots header nodeId = do
     logDebug $ sformat
         ("handleUnsolicitedHeader: single header was propagated, processing:\n"
          %build) header
-    classificationRes <- classifyNewHeader pm header
+    classificationRes <- classifyNewHeader pm epochSlots header
     -- TODO: should we set 'To' hash to hash of header or leave it unlimited?
     case classificationRes of
         CHContinues -> do
@@ -217,15 +248,14 @@ updateLastKnownHeader lastKnownH header = do
 
 -- | Carefully apply blocks that came from the network.
 handleBlocks
-    :: forall ctx m .
-       ( BlockWorkMode ctx m
-       , HasMisbehaviorMetrics ctx
-       )
+    :: forall ctx m
+     . (BlockWorkMode ctx m, HasMisbehaviorMetrics ctx)
     => ProtocolMagic
+    -> ProtocolConstants
     -> OldestFirst NE Block
     -> Diffusion m
     -> m ()
-handleBlocks pm blocks diffusion = do
+handleBlocks pm pc blocks diffusion = do
     logDebug "handleBlocks: processing"
     inAssertMode $ logInfo $
         sformat ("Processing sequence of blocks: " % buildListBounds % "...") $
@@ -243,20 +273,19 @@ handleBlocks pm blocks diffusion = do
         logDebug $ sformat ("Handling block w/ LCA, which is "%shortHashF) lcaHash
         -- Head blund in result is the youngest one.
         toRollback <- DB.loadBlundsFromTipWhile $ \blk -> headerHash blk /= lcaHash
-        maybe (applyWithoutRollback pm diffusion blocks)
-              (applyWithRollback pm diffusion blocks lcaHash)
+        maybe (applyWithoutRollback pm pc diffusion blocks)
+              (applyWithRollback pm pc diffusion blocks lcaHash)
               (_NewestFirst nonEmpty toRollback)
 
 applyWithoutRollback
-    :: forall ctx m.
-       ( BlockWorkMode ctx m
-       , HasMisbehaviorMetrics ctx
-       )
+    :: forall ctx m
+     . (BlockWorkMode ctx m, HasMisbehaviorMetrics ctx)
     => ProtocolMagic
+    -> ProtocolConstants
     -> Diffusion m
     -> OldestFirst NE Block
     -> m ()
-applyWithoutRollback pm diffusion blocks = do
+applyWithoutRollback pm pc diffusion blocks = do
     logInfo . sformat ("Trying to apply blocks w/o rollback. " % multilineBounds 6)
        . getOldestFirst . map (view blockHeader) $ blocks
     modifyStateLock HighPriority ApplyBlock applyWithoutRollbackDo >>= \case
@@ -276,7 +305,7 @@ applyWithoutRollback pm diffusion blocks = do
                     & map (view blockHeader)
                 applied = NE.fromList $
                     getOldestFirst prefix <> one (toRelay ^. blockHeader)
-            relayBlock diffusion toRelay
+            relayBlock (pcEpochSlots pc) diffusion toRelay
             logInfo $ blocksAppliedMsg applied
             for_ blocks $ jsonLog . jlAdoptedBlock
   where
@@ -285,67 +314,82 @@ applyWithoutRollback pm diffusion blocks = do
         :: HeaderHash -> m (HeaderHash, Either ApplyBlocksException HeaderHash)
     applyWithoutRollbackDo curTip = do
         logInfo "Verifying and applying blocks..."
-        res <- verifyAndApplyBlocks pm False blocks
+        res <- verifyAndApplyBlocks pm pc False blocks
         logInfo "Verifying and applying blocks done"
         let newTip = either (const curTip) identity res
         pure (newTip, res)
 
 applyWithRollback
-    :: ( BlockWorkMode ctx m
-       , HasMisbehaviorMetrics ctx
-       )
+    :: (BlockWorkMode ctx m, HasMisbehaviorMetrics ctx)
     => ProtocolMagic
+    -> ProtocolConstants
     -> Diffusion m
     -> OldestFirst NE Block
     -> HeaderHash
     -> NewestFirst NE Blund
     -> m ()
-applyWithRollback pm diffusion toApply lca toRollback = do
-    logInfo . sformat ("Trying to apply blocks w/o rollback. " % multilineBounds 6)
-       . getOldestFirst . map (view blockHeader) $ toApply
-    logInfo $ sformat ("Blocks to rollback "%listJson) toRollbackHashes
+applyWithRollback pm pc diffusion toApply lca toRollback = do
+    logInfo
+        . sformat ("Trying to apply blocks w/o rollback. " % multilineBounds 6)
+        . getOldestFirst
+        . map (view blockHeader)
+        $ toApply
+    logInfo $ sformat ("Blocks to rollback " % listJson) toRollbackHashes
     res <- modifyStateLock HighPriority ApplyBlockWithRollback $ \curTip -> do
-        res <- L.applyWithRollback pm toRollback toApplyAfterLca
+        res <- L.applyWithRollback pm pc toRollback toApplyAfterLca
         pure (either (const curTip) identity res, res)
     case res of
         Left (pretty -> err) ->
             logWarning $ "Couldn't apply blocks with rollback: " <> err
         Right newTip -> do
             logDebug $ sformat
-                ("Finished applying blocks w/ rollback, relaying new tip: "%shortHashF)
+                ( "Finished applying blocks w/ rollback, relaying new tip: "
+                % shortHashF
+                )
                 newTip
             reportRollback
             logInfo $ blocksRolledBackMsg (getNewestFirst toRollback)
             logInfo $ blocksAppliedMsg (getOldestFirst toApply)
             for_ (getOldestFirst toApply) $ jsonLog . jlAdoptedBlock
-            relayBlock diffusion $ toApply ^. _OldestFirst . _neLast
+            relayBlock (pcEpochSlots pc) diffusion
+                $  toApply
+                ^. _OldestFirst
+                .  _neLast
   where
     toRollbackHashes = fmap headerHash toRollback
-    reportRollback = do
+    reportRollback   = do
         let rollbackDepth = length toRollback
 
         -- Commit rollback value to EKG
-        whenJustM (view misbehaviorMetrics) $ liftIO .
-            flip Metrics.set (fromIntegral rollbackDepth) . _mmRollbacks
+        whenJustM (view misbehaviorMetrics)
+            $ liftIO
+            . flip Metrics.set (fromIntegral rollbackDepth)
+            . _mmRollbacks
 
     panicBrokenLca = error "applyWithRollback: nothing after LCA :<"
     toApplyAfterLca =
-        OldestFirst $
-        fromMaybe panicBrokenLca $ nonEmpty $
-        NE.dropWhile ((lca /=) . (^. prevBlockL)) $
-        getOldestFirst $ toApply
+        OldestFirst
+            $ fromMaybe panicBrokenLca
+            $ nonEmpty
+            $ NE.dropWhile ((lca /=) . (^. prevBlockL))
+            $ getOldestFirst
+            $ toApply
 
 relayBlock
-    :: forall ctx m.
-       (BlockWorkMode ctx m)
-    => Diffusion m -> Block -> m ()
-relayBlock _ (Left _)                  = logDebug "Not relaying Genesis block"
-relayBlock diffusion (Right mainBlk) = do
-    recoveryInProgress >>= \case
-        True -> logDebug "Not relaying block in recovery mode"
+    :: forall ctx m
+     . BlockWorkMode ctx m
+    => SlotCount
+    -> Diffusion m
+    -> Block
+    -> m ()
+relayBlock _ _ (Left _) = logDebug "Not relaying Genesis block"
+relayBlock epochSlots diffusion (Right mainBlk) = do
+    recoveryInProgress epochSlots >>= \case
+        True  -> logDebug "Not relaying block in recovery mode"
         False -> do
-            logDebug $ sformat ("Calling announceBlock for "%shortHashF%".")
-                       (mainBlk ^. gbHeader . headerHashG)
+            logDebug $ sformat
+                ("Calling announceBlock for " % shortHashF % ".")
+                (mainBlk ^. gbHeader . headerHashG)
             void $ Diffusion.announceBlockHeader diffusion $ mainBlk ^. gbHeader
 
 ----------------------------------------------------------------------------
@@ -354,12 +398,12 @@ relayBlock diffusion (Right mainBlk) = do
 
 -- TODO: ban node for it!
 onFailedVerifyBlocks
-    :: forall ctx m.
-       (BlockWorkMode ctx m)
-    => NonEmpty Block -> Text -> m ()
+    :: forall ctx m . BlockWorkMode ctx m => NonEmpty Block -> Text -> m ()
 onFailedVerifyBlocks blocks err = do
-    logWarning $ sformat ("Failed to verify blocks: "%stext%"\n  blocks = "%listJson)
-        err (fmap headerHash blocks)
+    logWarning $ sformat
+        ("Failed to verify blocks: " % stext % "\n  blocks = " % listJson)
+        err
+        (fmap headerHash blocks)
     throwM $ DialogUnexpected err
 
 blocksAppliedMsg

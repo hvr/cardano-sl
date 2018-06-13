@@ -28,19 +28,22 @@ import           Test.Pos.Crypto.Dummy (dummyProtocolMagic)
 
 -- This tests are quite slow, hence max success is at most 20.
 spec :: Spec
-spec = withDefConfiguration $ \_ ->
-    describe "Block properties" $ modifyMaxSuccess (min 20) $ do
-        describe "mkMainHeader" $ do
-            prop mainHeaderFormationDesc mainHeaderFormation
-        describe "mkGenesisHeader" $ do
-            prop genesisHeaderFormationDesc genesisHeaderFormation
-        describe "verifyHeader" $ do
-            prop verifyHeaderDesc validateGoodMainHeader
-            prop invalidProtocolMagicHeaderDesc
-                 validateBadProtocolMagicMainHeader
-        describe "verifyHeaders" $ modifyMaxSuccess (const 1) $ do
-            prop verifyHeadersDesc validateGoodHeaderChain
-            emptyHeaderChain (NewestFirst [])
+spec =
+    withDefConfiguration
+        $ describe "Block properties"
+        $ modifyMaxSuccess (min 20)
+        $ do
+              describe "mkMainHeader" $ do
+                  prop mainHeaderFormationDesc mainHeaderFormation
+              describe "mkGenesisHeader" $ do
+                  prop genesisHeaderFormationDesc genesisHeaderFormation
+              describe "verifyHeader" $ do
+                  prop verifyHeaderDesc validateGoodMainHeader
+                  prop invalidProtocolMagicHeaderDesc
+                       validateBadProtocolMagicMainHeader
+              describe "verifyHeaders" $ modifyMaxSuccess (const 1) $ do
+                  prop verifyHeadersDesc validateGoodHeaderChain
+                  emptyHeaderChain (NewestFirst [])
   where
     mainHeaderFormationDesc
         = "Manually generating a main header block and using\

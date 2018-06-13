@@ -41,10 +41,11 @@ import           Test.Pos.Lrc.Arbitrary (GenesisMpcThd, ValidRichmenStakes (..))
 import           Test.Pos.Util.QuickCheck.Property (qcElem, qcFail, qcIsRight)
 
 import           Test.Pos.Configuration (withDefConfiguration)
+import           Test.Pos.Core.Dummy (dummyK)
 import           Test.Pos.Crypto.Dummy (dummyProtocolMagic)
 
 spec :: Spec
-spec = withDefConfiguration $ \_ -> describe "Ssc.Base" $ do
+spec = withDefConfiguration $ describe "Ssc.Base" $ do
     describe "verifyCommitment" $ do
         prop description_verifiesOkComm verifiesOkComm
     describe "verifyCommitmentSignature" $ do
@@ -63,7 +64,7 @@ spec = withDefConfiguration $ \_ -> describe "Ssc.Base" $ do
         prop description_checksBadOpeningsPayload checksBadOpeningsPayload
     describe "checkSharesPayload" $ do
         prop description_emptyPayload
-            (\e mrs hm -> emptyPayload (checkSharesPayload e) $ HM.insert e hm mrs)
+            (\e mrs hm -> emptyPayload (checkSharesPayload dummyK e) $ HM.insert e hm mrs)
         prop description_checksGoodSharesPayload checksGoodSharesPayload
         prop description_checksBadSharesPayload checksBadSharesPayload
     describe "checkCertificatesPayload" $ do
@@ -153,7 +154,7 @@ emptyPayloadComms GoodPayload {..} =
     let e :: EpochIndex
         validMrs :: MultiRichmenStakes
         (e, validMrs) = (gpEpoch, gpMultiRichmenStakes)
-    in emptyPayload (checkCommitmentsPayload e) validMrs
+    in emptyPayload (checkCommitmentsPayload dummyK e) validMrs
 
 data GoodPayload p = GoodPayload
     { gpEpoch              :: !EpochIndex
@@ -192,7 +193,7 @@ instance HasConfiguration => Arbitrary GoodCommsPayload where
         -- in 'gsVssCertificate'.
         -- This is because rolling back slots is and should be tested elsewhere.
         _sgsVssCertificates <- VssCertData
-            <$> (pure . EpochOrSlot . Right . crucialSlot $ gpEpoch)
+            <$> (pure . EpochOrSlot . Right . crucialSlot dummyK $ gpEpoch)
             <*> pure stableCerts
             <*> arbitrary
             <*> arbitrary
@@ -211,7 +212,7 @@ instance HasConfiguration => Arbitrary GoodCommsPayload where
 -- TODO: Account for 'CommSharesOnWrongParticipants' failure
 checksGoodCommsPayload :: HasConfiguration => GoodCommsPayload -> Bool
 checksGoodCommsPayload (GoodPayload epoch sgs commsMap mrs) =
-    case tossRunner mrs sgs $ checkCommitmentsPayload epoch commsMap of
+    case tossRunner mrs sgs $ checkCommitmentsPayload dummyK epoch commsMap of
         Left (CommSharesOnWrongParticipants _) -> True
         Right _                                -> True
         _                                      -> False
@@ -231,7 +232,7 @@ checksBadCommsPayload
     seed =
     let mrsWithMissingEpoch = HM.delete epoch mrs
         noRichmen =
-            tossRunner mrsWithMissingEpoch sgs $ checkCommitmentsPayload epoch commsMap
+            tossRunner mrsWithMissingEpoch sgs $ checkCommitmentsPayload dummyK epoch commsMap
         res1 = case noRichmen of
             Left (NoRichmen e) -> e == epoch
             _                  -> False
@@ -241,7 +242,7 @@ checksBadCommsPayload
 
         newCommsMap = wrapCMap (HM.insert sid comm) commsMap
         committingNoParticipants =
-            tossRunner mrs sgs $ checkCommitmentsPayload epoch newCommsMap
+            tossRunner mrs sgs $ checkCommitmentsPayload dummyK epoch newCommsMap
         res2 = case committingNoParticipants of
             Left (CommittingNoParticipants (s :| [])) -> s == sid
             _                                         -> False
@@ -260,7 +261,7 @@ checksBadCommsPayload
 
         sgs' = sgs & sgsCommitments %~ wrapCMap (HM.insert someRichman comm)
         commitmentAlreadySent =
-            tossRunner mrs sgs' $ checkCommitmentsPayload epoch commsMap
+            tossRunner mrs sgs' $ checkCommitmentsPayload dummyK epoch commsMap
         res3 = case commitmentAlreadySent of
             Left (CommitmentAlreadySent (s :| [])) -> s == someRichman
             _                                      -> False
@@ -391,7 +392,7 @@ instance HasConfiguration => Arbitrary GoodSharesPayload where
         -- 'lastKnownEoS' field: 'checkSharesPayload' is called with the same epoch as the
         -- 'lastKnownEoS' in 'gsVssCertificate'.
         _sgsVssCertificates <- VssCertData
-            <$> (pure . EpochOrSlot . Right . crucialSlot $ gpEpoch)
+            <$> (pure . EpochOrSlot . Right . crucialSlot dummyK $ gpEpoch)
             <*> pure stableCerts
             <*> arbitrary
             <*> arbitrary
@@ -422,7 +423,7 @@ instance HasConfiguration => Arbitrary GoodSharesPayload where
 --make the already non-trivial arbitrary instance for 'GoodSharesPayload' unmanageable.
 checksGoodSharesPayload :: HasConfiguration => GoodSharesPayload -> Bool
 checksGoodSharesPayload (GoodPayload epoch sgs sharesMap mrs) =
-    case tossRunner mrs sgs $ checkSharesPayload epoch sharesMap of
+    case tossRunner mrs sgs $ checkSharesPayload dummyK epoch sharesMap of
         Left (DecrSharesNotMatchCommitment _) -> True
         Right _                               -> True
         _                                     -> False
@@ -451,11 +452,11 @@ checksBadSharesPayload (GoodPayload epoch g@SscGlobalState {..} sm mrs) pk ne ce
 
         mrsWithMissingEpoch = HM.delete epoch mrs
         noRichmen =
-            tossRunner mrsWithMissingEpoch sgs $ checkSharesPayload epoch sharesMap
+            tossRunner mrsWithMissingEpoch sgs $ checkSharesPayload dummyK epoch sharesMap
         res1 = noRichmen === Left (NoRichmen epoch)
 
         newSharesMap = HM.insert sid mempty sharesMap
-        sharesNotRichmen = tossRunner mrs sgs $ checkSharesPayload epoch newSharesMap
+        sharesNotRichmen = tossRunner mrs sgs $ checkSharesPayload dummyK epoch newSharesMap
         res2 = case sharesNotRichmen of
             Left (SharesNotRichmen nes) -> sid `qcElem` nes
             _ -> qcFail $ "expected " <> show sharesNotRichmen <>
@@ -463,7 +464,7 @@ checksBadSharesPayload (GoodPayload epoch g@SscGlobalState {..} sm mrs) pk ne ce
 
         newerSharesMap = fmap (HM.insert sid ne) sharesMap
         internalShareWithoutComm =
-            tossRunner mrs sgs $ checkSharesPayload epoch newerSharesMap
+            tossRunner mrs sgs $ checkSharesPayload dummyK epoch newerSharesMap
         res3 = case internalShareWithoutComm of
             Left (InternalShareWithoutCommitment nes) -> sid `qcElem` nes
             _ -> qcFail $ "expected " <> show internalShareWithoutComm <>
@@ -479,7 +480,7 @@ checksBadSharesPayload (GoodPayload epoch g@SscGlobalState {..} sm mrs) pk ne ce
                          vcd { certs = fst $ insertVss cert' certs}
         mrs' = HM.update (Just . HM.insert sid (mkCoin 0)) epoch mrs
         sharesAlreadySent =
-            tossRunner mrs' sgs' $ checkSharesPayload epoch newestSharesMap
+            tossRunner mrs' sgs' $ checkSharesPayload dummyK epoch newestSharesMap
         res4 = case sharesAlreadySent of
             Left (SharesAlreadySent nes) -> sid `qcElem` nes
             _ -> qcFail $ "expected " <> show sharesAlreadySent <>

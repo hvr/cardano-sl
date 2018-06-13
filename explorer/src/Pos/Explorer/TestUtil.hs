@@ -81,7 +81,7 @@ generateValidExplorerMockableMode blocksNumber slotsPerEpoch = do
     slotLeaders   <- produceSlotLeaders blocksNumber
     secretKeys    <- produceSecretKeys blocksNumber
 
-    blocks <- withDefConfigurations $ \_ _ ->
+    blocks <- withDefConfigurations $ \_ ->
         produceBlocksByBlockNumberAndSlots blocksNumber slotsPerEpoch slotLeaders secretKeys
 
     let tipBlock         = Prelude.last blocks
@@ -101,12 +101,12 @@ generateValidExplorerMockableMode blocksNumber slotsPerEpoch = do
         }
 
   where
-    createMapPageHHs :: [Block] -> ProtocolMagic -> Map Page [HeaderHash]
-    createMapPageHHs blocks _ =
+    createMapPageHHs :: [Block] -> Map Page [HeaderHash]
+    createMapPageHHs blocks =
         fromListWith (++) [ (page, [hHash]) | (page, hHash) <- createPagedHeaderHashesPair blocks]
 
-    createMapHHsBlund :: [Block] -> ProtocolMagic -> Map HeaderHash Blund
-    createMapHHsBlund blocks _ = fromList $ map blockHH blocks
+    createMapHHsBlund :: [Block] -> Map HeaderHash Blund
+    createMapHHsBlund blocks = fromList $ map blockHH blocks
       where
         blockHH :: Block -> (HeaderHash, Blund)
         blockHH block = (headerHash block, (block, createEmptyUndo))
@@ -115,9 +115,8 @@ generateValidExplorerMockableMode blocksNumber slotsPerEpoch = do
     createMapEpochPageHHs
         :: [Block]
         -> SlotsPerEpoch
-        -> ProtocolMagic
         -> Map EpochPagedBlocksKey [HeaderHash]
-    createMapEpochPageHHs blocks slotsPerEpoch' _ =
+    createMapEpochPageHHs blocks slotsPerEpoch' =
         unions $ map convertToPagedMap epochBlock
       where
         epochBlock :: [(EpochIndex, [HeaderHash])]
@@ -137,9 +136,8 @@ generateValidExplorerMockableMode blocksNumber slotsPerEpoch = do
 
     createMapEpochMaxPages
         :: [EpochPagedBlocksKey]
-        -> ProtocolMagic
         -> Map Epoch Page
-    createMapEpochMaxPages epochPages _ = do
+    createMapEpochMaxPages epochPages = do
         let groupedEpochPages :: [[(Epoch, Page)]]
             groupedEpochPages = groupBy ((==) `on` fst) epochPages
 

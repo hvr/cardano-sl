@@ -39,7 +39,8 @@ import           Pos.Block.Slog (mkSlogContext)
 import           Pos.Client.CLI.Util (readLoggerConfig)
 import           Pos.Configuration
 import           Pos.Context (ConnectedPeers (..), NodeContext (..), StartTime (..))
-import           Pos.Core (HasConfiguration, Timestamp, gdStartTime, genesisData)
+import           Pos.Core (BlockCount, HasConfiguration, Timestamp, gdStartTime, genesisData,
+                           kEpochSlots)
 import           Pos.DB (MonadDBRead, NodeDBs)
 import           Pos.DB.Rocks (closeNodeDBs, openNodeDBs)
 import           Pos.Delegation (DelegationVar, HasDlgConfiguration, mkDelegationVar)
@@ -93,19 +94,20 @@ data NodeResources ext = NodeResources
 
 -- | Allocate all resources used by node. They must be released eventually.
 allocateNodeResources
-    :: forall ext .
-       ( Default ext
+    :: forall ext
+     . ( Default ext
        , HasConfiguration
        , HasNodeConfiguration
        , HasDlgConfiguration
        , HasBlockConfiguration
        )
-    => NodeParams
+    => BlockCount
+    -> NodeParams
     -> SscParams
     -> TxpGlobalSettings
     -> InitMode ()
     -> Production (NodeResources ext)
-allocateNodeResources np@NodeParams {..} sscnp txpSettings initDB = do
+allocateNodeResources k np@NodeParams {..} sscnp txpSettings initDB = do
     logInfo "Allocating node resources..."
     npDbPath <- case npDbPathM of
         Nothing -> do
@@ -144,12 +146,12 @@ allocateNodeResources np@NodeParams {..} sscnp txpSettings initDB = do
                 , ancdEkgStore = nrEkgStore
                 , ancdTxpMemState = txpVar
                 }
-        ctx@NodeContext {..} <- allocateNodeContext ancd txpSettings nrEkgStore
+        ctx@NodeContext {..} <- allocateNodeContext k ancd txpSettings nrEkgStore
         putLrcContext ncLrcContext
         logDebug "Filled LRC Context future"
         dlgVar <- mkDelegationVar
         logDebug "Created DLG var"
-        sscState <- mkSscState
+        sscState <- mkSscState $ kEpochSlots k
         logDebug "Created SSC var"
         jsonLogHandle <-
             case npJLFile of
@@ -190,23 +192,25 @@ releaseNodeResources NodeResources {..} = do
 
 -- | Run computation which requires 'NodeResources' ensuring that
 -- resources will be released eventually.
-bracketNodeResources :: forall ext a.
-      ( Default ext
-      , HasConfiguration
-      , HasNodeConfiguration
-      , HasDlgConfiguration
-      , HasBlockConfiguration
-      )
-    => NodeParams
+bracketNodeResources
+    :: forall ext a
+     . ( Default ext
+       , HasConfiguration
+       , HasNodeConfiguration
+       , HasDlgConfiguration
+       , HasBlockConfiguration
+       )
+    => BlockCount
+    -> NodeParams
     -> SscParams
     -> TxpGlobalSettings
     -> InitMode ()
     -> (HasConfiguration => NodeResources ext -> Production a)
     -> Production a
-bracketNodeResources np sp txp initDB action = do
+bracketNodeResources k np sp txp initDB action = do
     let msg = "`NodeResources'"
     bracketWithLogging msg
-            (allocateNodeResources np sp txp initDB)
+            (allocateNodeResources k np sp txp initDB)
             releaseNodeResources $ \nodeRes ->do
         -- Notify systemd we are fully operative
         -- FIXME this is not the place to notify.
@@ -253,13 +257,15 @@ data AllocateNodeContextData ext = AllocateNodeContextData
     }
 
 allocateNodeContext
-    :: forall ext .
-      (HasConfiguration, HasNodeConfiguration, HasBlockConfiguration)
-    => AllocateNodeContextData ext
+    :: forall ext
+     . (HasConfiguration, HasNodeConfiguration, HasBlockConfiguration)
+    => BlockCount
+    -> AllocateNodeContextData ext
     -> TxpGlobalSettings
     -> Metrics.Store
     -> InitMode NodeContext
-allocateNodeContext ancd txpSettings ekgStore = do
+allocateNodeContext k ancd txpSettings ekgStore = do
+    let epochSlots = kEpochSlots k
     let AllocateNodeContextData { ancdNodeParams = np@NodeParams {..}
                                 , ancdSscParams = sscnp
                                 , ancdPutSlotting = putSlotting
@@ -278,7 +284,7 @@ allocateNodeContext ancd txpSettings ekgStore = do
     logDebug "Created LRC sync"
     ncSlottingVar <- (gdStartTime genesisData,) <$> mkSlottingVar
     logDebug "Created slotting variable"
-    ncSlottingContext <- mkSimpleSlottingStateVar
+    ncSlottingContext <- mkSimpleSlottingStateVar epochSlots
     logDebug "Created slotting context"
     putSlotting ncSlottingVar ncSlottingContext
     logDebug "Filled slotting future"
@@ -291,11 +297,11 @@ allocateNodeContext ancd txpSettings ekgStore = do
     ncStartTime <- StartTime <$> liftIO Time.getCurrentTime
     ncLastKnownHeader <- newTVarIO Nothing
     logDebug "Created last known header and shutdown flag variables"
-    ncUpdateContext <- mkUpdateContext
+    ncUpdateContext <- mkUpdateContext epochSlots
     logDebug "Created context for update"
     ncSscContext <- createSscContext sscnp
     logDebug "Created context for ssc"
-    ncSlogContext <- mkSlogContext store
+    ncSlogContext <- mkSlogContext k store
     logDebug "Created context for slog"
     -- TODO synchronize the NodeContext peers var with whatever system
     -- populates it.
