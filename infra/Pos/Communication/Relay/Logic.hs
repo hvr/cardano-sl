@@ -78,7 +78,7 @@ handleReqL
     -> OQ.OutboundQ pack NodeId Bucket
     -> (NodeId -> key -> IO (Maybe contents))
     -> (ListenerSpec, OutSpecs)
-handleReqL logTrace oq handleReq = listenerConv logTrace oq $ \__ourVerInfo nodeId conv ->
+handleReqL logTrace oq handleReq = listenerConv logTrace biSerIO biSerIO oq $ \__ourVerInfo nodeId conv ->
     let handlingLoop = do
             mbMsg <- recvLimited conv mlReqMsg
             case mbMsg of
@@ -107,7 +107,7 @@ handleMempoolL
     -> MempoolParams
     -> [(ListenerSpec, OutSpecs)]
 handleMempoolL _ _ NoMempool = []
-handleMempoolL logTrace oq (KeyMempool tagP handleMempool) = pure $ listenerConv logTrace oq $
+handleMempoolL logTrace oq (KeyMempool tagP handleMempool) = pure $ listenerConv logTrace biSerIO biSerIO oq $
     \__ourVerInfo __nodeId conv -> do
         mbMsg <- recvLimited conv mlMempoolMsg
         whenJust mbMsg $ \msg@MempoolMsg -> do
@@ -137,7 +137,7 @@ handleDataOnlyL
     -> IO (Limit contents)
     -> (NodeId -> contents -> IO Bool)
     -> (ListenerSpec, OutSpecs)
-handleDataOnlyL logTrace oq enqueue mkMsg mkLimit handleData = listenerConv logTrace oq $ \__ourVerInfo nodeId conv ->
+handleDataOnlyL logTrace oq enqueue mkMsg mkLimit handleData = listenerConv logTrace biSerIO biSerIO oq $ \__ourVerInfo nodeId conv ->
     -- First binding is to inform GHC that the send type is Void.
     let msg :: Msg
         msg = mkMsg (OriginForward nodeId)
@@ -280,7 +280,7 @@ invDataListener
   -> EnqueueMsg
   -> InvReqDataParams key contents
   -> (ListenerSpec, OutSpecs)
-invDataListener logTrace oq enqueue InvReqDataParams{..} = listenerConv logTrace oq $ \__ourVerInfo nodeId conv ->
+invDataListener logTrace oq enqueue InvReqDataParams{..} = listenerConv logTrace biSerIO biSerIO oq $ \__ourVerInfo nodeId conv ->
     let handlingLoop = do
             lim <- irdpMkLimit
             inv' <- recvLimited conv (mlEither mlInvMsg (mlDataMsg lim))

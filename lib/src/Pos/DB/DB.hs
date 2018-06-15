@@ -11,6 +11,7 @@ module Pos.DB.DB
 
 import           Universum
 
+import           Pos.Binary.Class (DecoderAttr (..))
 import           Pos.Block.Base (genesisBlock0)
 import           Pos.Core (BlockVersionData, headerHash,
                            GenesisHash (..), genesisHash, protocolMagic)
@@ -34,7 +35,7 @@ initNodeDBs = do
     prepareGStateDB initialTip
     prepareLrcDB
   where
-    gb = genesisBlock0 protocolMagic (GenesisHash genesisHash) genesisLeaders
+    gb = genesisBlock0 protocolMagic (GenesisHash genesisHash) genesisLeaders DecoderAttrNone DecoderAttrNone
 
 ----------------------------------------------------------------------------
 -- MonadGState instance

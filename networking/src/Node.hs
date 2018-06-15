@@ -1,19 +1,20 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
-{-# LANGUAGE BangPatterns               #-}
-{-# LANGUAGE DeriveDataTypeable         #-}
-{-# LANGUAGE DeriveGeneric              #-}
-{-# LANGUAGE ExistentialQuantification  #-}
-{-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE GADTSyntax                 #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE KindSignatures             #-}
-{-# LANGUAGE NamedFieldPuns             #-}
-{-# LANGUAGE RankNTypes                 #-}
-{-# LANGUAGE RecordWildCards            #-}
-{-# LANGUAGE RecursiveDo                #-}
-{-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE StandaloneDeriving         #-}
-{-# LANGUAGE TypeApplications           #-}
+{-# LANGUAGE BangPatterns                #-}
+{-# LANGUAGE DeriveFunctor               #-}
+{-# LANGUAGE DeriveDataTypeable          #-}
+{-# LANGUAGE DeriveGeneric               #-}
+{-# LANGUAGE ExistentialQuantification   #-}
+{-# LANGUAGE FlexibleContexts            #-}
+{-# LANGUAGE GADTSyntax                  #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving  #-}
+{-# LANGUAGE KindSignatures              #-}
+{-# LANGUAGE NamedFieldPuns              #-}
+{-# LANGUAGE RankNTypes                  #-}
+{-# LANGUAGE RecordWildCards             #-}
+{-# LANGUAGE RecursiveDo                 #-}
+{-# LANGUAGE ScopedTypeVariables         #-}
+{-# LANGUAGE StandaloneDeriving          #-}
+{-# LANGUAGE TypeApplications            #-}
 
 module Node (
 
@@ -60,6 +61,7 @@ import qualified Data.ByteString as BS
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.Proxy (Proxy (..))
+import           Data.Semigroup ((<>))
 import qualified Data.Text as T
 import           Data.Typeable (Typeable)
 import           Data.Word (Word32)
@@ -68,8 +70,8 @@ import qualified Network.Transport as NT
 import           Node.Conversation
 import           Node.Internal (ChannelIn, ChannelOut)
 import qualified Node.Internal as LL
-import           Node.Message.Class (Message (..), MessageCode, Serializable (..), pack,
-                                     unpack)
+import           Node.Message.Class (Message (..), MessageCode, Serializable', Serializable (..), pack,
+                                     unpack, coerceExtRep)
 import           Node.Message.Decoder (ByteOffset, Decoder (..), DecoderStep (..), continueDecoding)
 import           Pos.Util.Trace (Trace, Severity (..), traceWith)
 import           System.Random (StdGen)
@@ -85,6 +87,7 @@ nodeEndPointAddress :: Node -> NT.EndPointAddress
 nodeEndPointAddress (Node addr _ _) = LL.nodeEndPointAddress addr
 
 data Input t = Input t | End
+  deriving (Functor)
 
 data LimitExceeded = LimitExceeded
   deriving (Show, Typeable)
@@ -108,8 +111,8 @@ instance Exception NoParse where
 data Listener packingType peerData where
   Listener
     :: Message rcv
-    => Serializable packingType IO snd
-    -> Serializable packingType IO rcv
+    => Serializable' packingType IO snd
+    -> Serializable attr packingType IO rcv' rcv
     -> ListenerAction packingType peerData snd rcv
     -> Listener packingType peerData
 
@@ -146,7 +149,7 @@ makeListenerIndex = foldr combine (M.empty, [])
 nodeConverse
     :: forall packingType peerData .
        LL.Node packingType peerData
-    -> Serializable packingType IO MessageCode
+    -> Serializable' packingType IO MessageCode
     -> Converse packingType peerData
 nodeConverse nodeUnit serializeMessageCode = Converse nodeConverse
   where
@@ -179,11 +182,11 @@ nodeConverse nodeUnit serializeMessageCode = Converse nodeConverse
 
 -- | Conversation actions for a given peer and in/out channels.
 nodeConversationActions
-    :: forall packingType peerData snd rcv .
+    :: forall attr packingType peerData snd rcv' rcv .
        LL.Node packingType peerData
     -> LL.NodeId
-    -> Serializable packingType IO snd
-    -> Serializable packingType IO rcv
+    -> Serializable' packingType IO snd
+    -> Serializable attr packingType IO rcv' rcv
     -> ChannelIn
     -> ChannelOut
     -> ConversationActions snd rcv
@@ -249,8 +252,8 @@ node
     -> (IO LL.Statistics -> LL.ReceiveDelay)
        -- ^ delay on receiving new connections.
     -> StdGen
-    -> Serializable packingType IO peerData
-    -> Serializable packingType IO MessageCode
+    -> Serializable' packingType IO peerData
+    -> Serializable' packingType IO MessageCode
     -> peerData
     -> LL.NodeEnvironment
     -> (Node -> NodeAction packingType peerData t)
@@ -333,8 +336,8 @@ node logTrace mkEndPoint mkReceiveDelay mkConnectDelay prng serializePeerData se
 --
 --   An empty ByteString will never be passed to a decoder.
 recvNext
-    :: forall packingType rcv .
-       Serializable packingType IO rcv
+    :: forall attr packingType rcv' rcv .
+       Serializable attr packingType IO rcv' rcv
     -> Int
     -> ChannelIn
     -> IO (Input rcv)
@@ -345,9 +348,9 @@ recvNext serializeRcv limit (LL.ChannelIn channel) = readNonEmpty (return End) $
     -- many more than the limit.
     let limit' = limit - BS.length bs
     decoderStep <- runDecoder (unpack serializeRcv)
-    (trailing, outcome) <- continueDecoding decoderStep bs >>= go limit'
+    (trailing, bsRep,  outcome) <- continueDecoding decoderStep bs >>= go limit' bs
     unless (BS.null trailing) (atomically $ unGetTChan channel (Just trailing))
-    return outcome
+    return $ coerceExtRep serializeRcv bsRep <$> outcome
   where
 
     readNonEmpty :: IO t -> (BS.ByteString -> IO t) -> IO t
@@ -357,11 +360,11 @@ recvNext serializeRcv limit (LL.ChannelIn channel) = readNonEmpty (return End) $
             Nothing -> nothing
             Just bs -> if BS.null bs then readNonEmpty nothing just else just bs
 
-    go !remaining decoderStep = case decoderStep of
+    go !remaining !bs decoderStep = case decoderStep of
         Fail trailing offset err -> throwIO $ NoParse trailing offset err
-        Done trailing _ thing -> return (trailing, Input thing)
+        Done trailing _ thing -> return (trailing, bs, Input thing)
         Partial next -> do
             when (remaining < 0) (throwIO LimitExceeded)
-            readNonEmpty (runDecoder (next Nothing) >>= go remaining) $ \bs ->
-                let remaining' = remaining - BS.length bs
-                in  runDecoder (next (Just bs)) >>= go remaining'
+            readNonEmpty (runDecoder (next Nothing) >>= go remaining bs) $ \bs' ->
+                let remaining' = remaining - BS.length bs'
+                in  runDecoder (next (Just bs')) >>= go remaining' (bs <> bs')

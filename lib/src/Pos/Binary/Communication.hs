@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds      #-}
 {-# LANGUAGE BinaryLiterals #-}
 
 {-# OPTIONS_GHC -fno-warn-orphans #-}
@@ -12,10 +13,11 @@ import           Universum
 
 import qualified Data.ByteString.Lazy as LBS
 
-import           Pos.Binary.Class (Bi (..), Cons (..), Field (..), decodeKnownCborDataItem,
+import           Pos.Binary.Class (Bi (..), BiExtRep (..), Cons (..), Field (..), DecoderAttrKind (..), decodeKnownCborDataItem,
                                    decodeUnknownCborDataItem, deriveSimpleBi,
                                    encodeKnownCborDataItem, encodeListLen,
-                                   encodeUnknownCborDataItem, enforceSize)
+                                   encodeUnknownCborDataItem, enforceSize,
+                                   runEitherExtRep, runNonEmptyExtRep)
 import           Pos.Binary.Core ()
 import           Pos.Block.BHelpers ()
 import           Pos.Block.Network (MsgBlock (..), MsgGetBlocks (..), MsgGetHeaders (..),
@@ -24,6 +26,7 @@ import           Pos.Communication.Types.Protocol (HandlerSpec (..), HandlerSpec
                                                    MsgSubscribe (..), MsgSubscribe1 (..),
                                                    VerInfo (..))
 import           Pos.Core (BlockVersion, HeaderHash)
+import           Pos.Util.Chrono (NewestFirst (..))
 import           Pos.Util.Util (cborError)
 
 -- TODO: move into each component
@@ -44,7 +47,7 @@ deriveSimpleBi ''MsgGetBlocks [
         Field [| mgbTo   :: HeaderHash |]
     ]]
 
-instance Bi MsgHeaders where
+instance Bi (MsgHeaders 'AttrNone) where
     encode = \case
         (MsgHeaders b) -> encodeListLen 2 <> encode (0 :: Word8) <> encode b
         (MsgNoHeaders t) -> encodeListLen 2 <> encode (1 :: Word8) <> encode t
@@ -56,7 +59,20 @@ instance Bi MsgHeaders where
             1 -> MsgNoHeaders <$> decode
             t -> cborError $ "MsgHeaders wrong tag: " <> show t
 
-instance Bi MsgBlock where
+instance BiExtRep MsgHeaders where
+    decodeWithOffsets = do
+        enforceSize "MsgHeaders" 2
+        tag <- decode @Word8
+        case tag of
+            0 -> MsgHeaders . NewestFirst . runNonEmptyExtRep <$> decodeWithOffsets
+            1 -> MsgNoHeaders <$> decode
+            t -> cborError $ "MsgHeaders wrong tag: " <> show t
+    spliceExtRep bs (MsgHeaders hs)  = MsgHeaders $ fmap (spliceExtRep bs) hs
+    spliceExtRep _  (MsgNoHeaders t) = MsgNoHeaders t
+    forgetExtRep (MsgHeaders hs)  = MsgHeaders $ fmap forgetExtRep hs
+    forgetExtRep (MsgNoHeaders t) = MsgNoHeaders t
+
+instance Bi (MsgBlock 'AttrNone) where
     encode = \case
         (MsgBlock b) -> encodeListLen 2 <> encode (0 :: Word8) <> encode b
         (MsgNoBlock t) -> encodeListLen 2 <> encode (1 :: Word8) <> encode t
@@ -67,6 +83,19 @@ instance Bi MsgBlock where
             0 -> MsgBlock <$> decode
             1 -> MsgNoBlock <$> decode
             t -> cborError $ "MsgBlock wrong tag: " <> show t
+
+instance BiExtRep MsgBlock where
+    decodeWithOffsets = do
+        enforceSize "MsgBlock" 2
+        tag <- decode @Word8
+        case tag of
+            0 -> MsgBlock . runEitherExtRep <$> decodeWithOffsets
+            1 -> MsgNoBlock <$> decode
+            t -> cborError $ "MsgBlock wrong tag: " <> show t
+    spliceExtRep bs (MsgBlock blk) = MsgBlock $ either (Left . spliceExtRep bs) (Right . spliceExtRep bs) blk
+    spliceExtRep _  (MsgNoBlock t) = MsgNoBlock t
+    forgetExtRep (MsgBlock blk) = MsgBlock $ either (Left . forgetExtRep) (Right . forgetExtRep) blk
+    forgetExtRep (MsgNoBlock t) = MsgNoBlock t
 
 -- deriveSimpleBi is not happy with constructors without arguments
 -- "fake" deriving as per `MempoolMsg`.

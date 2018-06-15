@@ -13,7 +13,9 @@ module Pos.Core.Block.Blockchain
 
        -- * Smart constructors
        , mkGenericHeader
+       , mkGenericHeader'
        , mkGenericBlock
+       , mkGenericBlock'
 
        -- * Lenses
        -- ** Header
@@ -256,6 +258,7 @@ instance ( Typeable b
         _gbBody   <- decode
         _gbExtra  <- decode
         end <- peekByteOffset
+        -- Subtract two bytes (check out `Either` instance).
         let _gbDecoderAttr = DecoderAttrOffsets start end
         return $ UnsafeGenericBlock {..}
 
@@ -288,6 +291,18 @@ mkGenericHeader pm hashPrev body consensus extra decAttr =
   where
     proof = mkBodyProof @b @attr body
 
+mkGenericHeader'
+    :: forall b .
+       ( Blockchain b 'AttrNone )
+    => ProtocolMagic
+    -> BHeaderHash b
+    -> Body b
+    -> (BodyProof b -> ConsensusData b)
+    -> ExtraHeaderData b
+    -> GenericBlockHeader b 'AttrNone
+mkGenericHeader' pm hashPrev body consensus extra =
+    mkGenericHeader pm hashPrev body consensus extra DecoderAttrNone
+
 -- | Smart constructor for 'GenericBlock'.
 -- "Smart" because it uses the 'mkGenericHeader' "smart" constructor.
 mkGenericBlock
@@ -306,6 +321,19 @@ mkGenericBlock pm hashPrev body consensus extraH extra decAttrH decAttr =
     UnsafeGenericBlock header body extra decAttr
   where
     header = mkGenericHeader pm hashPrev body consensus extraH decAttrH
+
+mkGenericBlock'
+    :: forall b .
+       ( Blockchain b 'AttrNone )
+    => ProtocolMagic
+    -> BHeaderHash b
+    -> Body b
+    -> (BodyProof b -> ConsensusData b)
+    -> ExtraHeaderData b
+    -> ExtraBodyData b
+    -> GenericBlock b 'AttrNone
+mkGenericBlock' pm hashPrev body consensus extraH extra =
+    mkGenericBlock pm hashPrev body consensus extraH extra DecoderAttrNone DecoderAttrNone
 
 ----------------------------------------------------------------------------
 -- Lenses

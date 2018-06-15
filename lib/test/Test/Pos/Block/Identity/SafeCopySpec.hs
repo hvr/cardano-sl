@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 -- | This module tests SafeCopy instances for Block types.
 
 module Test.Pos.Block.Identity.SafeCopySpec
@@ -7,6 +8,7 @@ module Test.Pos.Block.Identity.SafeCopySpec
 import           Test.Hspec (Spec, describe)
 import           Universum
 
+import           Pos.Binary.Class (DecoderAttrKind (..))
 import           Pos.Arbitrary.Block ()
 import qualified Pos.Core.Block as BT
 import           Pos.SafeCopy ()
@@ -19,9 +21,9 @@ spec = withDefConfiguration $ describe "Block types" $ do
     describe "SafeCopy instances" $ do
         describe "GenericBlockHeader" $ do
             describe "GenesisBlockHeader" $ do
-                safeCopyTest @BT.GenesisBlockHeader
+                safeCopyTest @(BT.GenesisBlockHeader 'AttrNone)
             describe "MainBlockHeader" $ do
-                safeCopyTest @BT.MainBlockHeader
+                safeCopyTest @(BT.MainBlockHeader 'AttrNone)
         describe "GenesisBlockchain" $ do
             describe "BodyProof" $ do
                 safeCopyTest @(BT.BodyProof BT.GenesisBlockchain)

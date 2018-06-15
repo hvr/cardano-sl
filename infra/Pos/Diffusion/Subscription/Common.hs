@@ -258,7 +258,7 @@ subscriptionListener
     -> OQ.OutboundQ pack NodeId Bucket
     -> NodeType
     -> (ListenerSpec, OutSpecs)
-subscriptionListener logTrace oq nodeType = listenerConv @Void logTrace oq $ \__ourVerInfo nodeId conv -> do
+subscriptionListener logTrace oq nodeType = listenerConv @Void logTrace biSerIO biSerIO oq $ \__ourVerInfo nodeId conv -> do
     recvLimited conv mlMsgSubscribe >>= \case
         Just MsgSubscribe -> do
             let peers = simplePeers [(nodeType, nodeId)]
@@ -290,7 +290,7 @@ subscriptionListener1
     -> OQ.OutboundQ pack NodeId Bucket
     -> NodeType
     -> (ListenerSpec, OutSpecs)
-subscriptionListener1 logTrace oq nodeType = listenerConv @Void logTrace oq $ \_ourVerInfo nodeId conv -> do
+subscriptionListener1 logTrace oq nodeType = listenerConv @Void logTrace biSerIO biSerIO oq $ \_ourVerInfo nodeId conv -> do
     mbMsg <- recvLimited conv mlMsgSubscribe1
     whenJust mbMsg $ \MsgSubscribe1 -> do
       let peers = simplePeers [(nodeType, nodeId)]

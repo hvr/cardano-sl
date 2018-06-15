@@ -145,7 +145,7 @@ instance Arbitrary (DecoderAttr 'AttrNone) where
 -- | Helper function useful when implementing `spliceExtRep`.
 spliceExtRep' :: ByteString -> DecoderAttr 'AttrOffsets -> DecoderAttr 'AttrExtRep
 spliceExtRep' bs (DecoderAttrOffsets n m) = DecoderAttrExtRep
-    $ BS.take (fromIntegral $ n - m)
+    $ BS.take (fromIntegral $ m - n)
     $ BS.drop (fromIntegral n)
     $ bs
 

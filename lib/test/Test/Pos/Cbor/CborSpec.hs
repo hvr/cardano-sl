@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes       #-}
+{-# LANGUAGE DataKinds                 #-}
 {-# LANGUAGE DeriveGeneric             #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE GADTs                     #-}
@@ -484,14 +485,14 @@ spec = withDefConfiguration $ do
                 describe "Block network types" $ modifyMaxSuccess (min 10) $ do
                     binaryTest @BT.MsgGetHeaders
                     binaryTest @BT.MsgGetBlocks
-                    binaryTest @BT.MsgHeaders
-                    binaryTest @BT.MsgBlock
+                    binaryTest @(BT.MsgHeaders 'AttrNone)
+                    binaryTest @(BT.MsgBlock 'AttrNone)
                 describe "Blockchains and blockheaders" $ do
                     modifyMaxSuccess (min 10) $ describe "GenericBlockHeader" $ do
                         describe "GenesisBlockHeader" $ do
-                            binaryTest @BT.GenesisBlockHeader
+                            binaryTest @(BT.GenesisBlockHeader 'AttrNone)
                         describe "MainBlockHeader" $ do
-                            binaryTest @BT.MainBlockHeader
+                            binaryTest @(BT.MainBlockHeader 'AttrNone)
                     describe "GenesisBlockchain" $ do
                         describe "BodyProof" $ do
                             binaryTest @BT.GenesisExtraHeaderData

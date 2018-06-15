@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds            #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Pos.Communication.Message
@@ -27,7 +28,7 @@ instance Message MsgGetHeaders where
     messageCode _ = 4
     formatMessage _ = "GetHeaders"
 
-instance Message MsgHeaders where
+instance Message (MsgHeaders attr) where
     messageCode _ = 5
     formatMessage _ = "BlockHeaders"
 
@@ -35,7 +36,7 @@ instance Message MsgGetBlocks where
     messageCode _ = 6
     formatMessage _ = "GetBlocks"
 
-instance Message MsgBlock where
+instance Message (MsgBlock attr) where
     messageCode _ = 7
     formatMessage _ = "Block"
 

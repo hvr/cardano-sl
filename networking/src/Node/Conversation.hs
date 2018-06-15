@@ -29,8 +29,8 @@ converseWith = runConverse
 data Conversation packingType t where
     Conversation
         :: Message snd
-        => Serializable packingType IO snd
-        -> Serializable packingType IO rcv
+        => Serializable' packingType IO snd
+        -> Serializable attr packingType IO rcv' rcv
         -> (ConversationActions snd rcv -> IO t)
         -> Conversation packingType t
 

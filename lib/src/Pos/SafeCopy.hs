@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds            #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- | SafeCopy serialization of the world, required for wallet. ☕
@@ -19,7 +20,7 @@ import qualified PlutusCore.Program as PLCore
 import qualified PlutusCore.Term as PLCore
 import           Serokell.Data.Memory.Units (Byte, fromBytes, toBytes)
 
-import           Pos.Binary.Class (AsBinary (..), Bi)
+import           Pos.Binary.Class (AsBinary (..), DecoderAttrKind (..), DecoderAttr (..), Bi (..))
 import qualified Pos.Binary.Class as Bi
 import           Pos.Core.Block
 import           Pos.Core.Common (AddrAttributes (..), AddrSpendingData (..),
@@ -62,7 +63,7 @@ putCopyBi = contain . safePut . Bi.serialize
 getCopyBi :: forall a. Bi a => Contained (Cereal.Get a)
 getCopyBi = contain $ do
     bs <- safeGet
-    toCerealError $ case Bi.deserializeOrFail bs of
+    toCerealError $ case Bi.deserializeOrFail decode bs of
         Left (err, _) -> Left $ "getCopy@" <> Bi.label (Proxy @a) <> ": " <> show err
         Right (x, _)  -> Right x
 
@@ -179,7 +180,7 @@ instance ( SafeCopy (BHeaderHash b)
          , SafeCopy (ConsensusData b)
          , SafeCopy (ExtraHeaderData b)
          ) =>
-         SafeCopy (GenericBlockHeader b) where
+         SafeCopy (GenericBlockHeader b 'AttrNone) where
     getCopy =
         contain $
         do _gbhProtocolMagic <- safeGet
@@ -187,6 +188,7 @@ instance ( SafeCopy (BHeaderHash b)
            _gbhBodyProof <- safeGet
            _gbhConsensus <- safeGet
            _gbhExtra <- safeGet
+           let _gbhDecoderAttr = DecoderAttrNone
            return $! UnsafeGenericBlockHeader {..}
     putCopy UnsafeGenericBlockHeader {..} =
         contain $
@@ -203,12 +205,13 @@ instance ( SafeCopy (BHeaderHash b)
          , SafeCopy (Body b)
          , SafeCopy (ExtraBodyData b)
          ) =>
-         SafeCopy (GenericBlock b) where
+         SafeCopy (GenericBlock b 'AttrNone) where
     getCopy =
         contain $
         do _gbHeader <- safeGet
            _gbBody <- safeGet
            _gbExtra <- safeGet
+           let _gbDecoderAttr = DecoderAttrNone
            return $! UnsafeGenericBlock {..}
     putCopy UnsafeGenericBlock {..} =
         contain $
@@ -353,6 +356,10 @@ instance (Bi (AbstractHash algo a), Typeable algo, Typeable a) =>
         SafeCopy (AbstractHash algo a) where
    putCopy = putCopyBi
    getCopy = getCopyBi
+
+instance SafeCopy HeaderHash where
+    putCopy = putCopyBi
+    getCopy = getCopyBi
 
 instance Cereal.Serialize Byte where
     get = fromBytes <$> Cereal.get

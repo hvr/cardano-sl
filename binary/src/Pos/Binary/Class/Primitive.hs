@@ -36,6 +36,9 @@ module Pos.Binary.Class.Primitive
        -- * Cyclic redundancy check
        , encodeCrcProtected
        , decodeCrcProtected
+       -- * Testing utils
+       , fillExtRep
+       , fillExtRep'
        ) where
 
 import           Universum
@@ -285,3 +288,20 @@ decodeCrcProtected = do
     let crcErrorFmt = "decodeCrcProtected, expected CRC " % shown % " was not the computed one, which was " % shown
     when (actualCrc /= expectedCrc) $ cborError (sformat crcErrorFmt expectedCrc actualCrc)
     toCborError $ decodeFull' decode label body
+
+-- | Useful function for tests, but expensive since it serializes and
+-- deserializes the object with external representation.
+fillExtRep
+    :: forall a. (Bi (a 'AttrNone), BiExtRep a)
+    => a 'AttrNone
+    -> Either Text (a 'AttrExtRep)
+fillExtRep = fmap fst . fillExtRep'
+
+-- | Like `fillExtRep` but also return serialized value.
+fillExtRep'
+    :: forall a. (Bi (a 'AttrNone), BiExtRep a)
+    => a 'AttrNone
+    -> Either Text (a 'AttrExtRep, ByteString)
+fillExtRep' a =
+    let bs = serialize' a
+    in (,bs) . spliceExtRep bs <$> decodeFull' decodeWithOffsets labelExtRep bs

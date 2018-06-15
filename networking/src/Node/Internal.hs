@@ -73,7 +73,7 @@ import           Data.Time.Units (Microsecond)
 import           Formatting (sformat, shown, (%))
 import           GHC.Generics (Generic)
 import qualified Network.Transport as NT
-import           Node.Message.Class (Serializable (..))
+import           Node.Message.Class (Serializable', unpack, pack)
 import           Node.Message.Decoder (Decoder (..), DecoderStep (..), continueDecoding)
 import           Pos.Util.Trace (Trace, Severity (..), traceWith)
 import qualified System.Metrics.Distribution as Metrics (Distribution)
@@ -221,7 +221,7 @@ data Node packingType peerData = Node {
        --   so this is a way to delay per-high-level message rather than
        --   lower level events.
      , nodeConnectDelay      :: ReceiveDelay
-     , nodeSerializePeerData :: Serializable packingType IO peerData
+     , nodeSerializePeerData :: Serializable' packingType IO peerData
      }
 
 nodeId :: Node packingType peerData -> NodeId
@@ -622,7 +622,7 @@ manualNodeEndPoint ep = NodeEndPoint {
 
 -- | Bring up a 'Node' using a network transport.
 startNode
-    :: Serializable packingType IO peerData
+    :: Serializable' packingType IO peerData
     -> Trace IO (Severity, Text)
     -> peerData
     -> (Node packingType peerData -> NodeEndPoint)
@@ -953,6 +953,8 @@ nodeDispatcher node handlerInOut =
                 -- There's no leader. This connection is now the leader. Begin
                 -- the attempt to decode the peer data.
                 Nothing -> do
+                    -- We are ignoring `coerceExtRep` since peerData is decoded
+                    -- using `Bi` class.
                     decoderStep :: DecoderStep IO peerData <- runDecoder (unpack (nodeSerializePeerData node))
                     decoderStep' <- continueDecoding decoderStep (BS.concat chunks)
                     case decoderStep' of

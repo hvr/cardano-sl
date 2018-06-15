@@ -59,7 +59,7 @@ import           Formatting (bprint, build, hex, sformat, shown, (%))
 import qualified Network.Broadcast.OutboundQueue as OQ
 import           Network.Transport (EndPointAddress (..))
 import qualified Node as N
-import           Node.Message.Class (Message (..), MessageCode, Serializable)
+import           Node.Message.Class (Message (..), MessageCode, Serializable', Serializable)
 import           Serokell.Util.Base16 (base16F)
 import           Serokell.Util.Text (listJson, mapJson)
 
@@ -144,8 +144,8 @@ waitForConversations = sequenceA
 data Conversation t where
     Conversation
         :: (Message snd, Message rcv)
-        => Serializable BiP IO snd
-        -> Serializable BiP IO rcv
+        => Serializable' BiP IO snd
+        -> Serializable attr BiP IO rcv' rcv
         -> (N.ConversationActions snd rcv -> IO t)
         -> Conversation t
 

@@ -20,7 +20,7 @@ import           Pos.Binary.Class (DecoderAttrKind)
 import           Pos.Core.Block.Blockchain (GenericBlock (..))
 import           Pos.Core.Block.Genesis ()
 import           Pos.Core.Block.Main ()
-import           Pos.Core.Block.Union.Types (Block, BlockHeader (..) ,blockHeaderHash,
+import           Pos.Core.Block.Union.Types (Block, BlockHeader (..), blockHeaderHash,
                                              choosingBlockHeader)
 import           Pos.Core.Class (HasDifficulty (..), HasEpochIndex (..), HasEpochOrSlot (..),
                                  HasHeaderHash (..), HasPrevBlock (..), IsGenesisHeader, IsHeader,

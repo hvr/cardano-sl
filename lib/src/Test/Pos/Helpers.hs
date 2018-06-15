@@ -62,7 +62,7 @@ cborCanonicalRep :: forall a. (Bi a, Show a) => a -> Property
 cborCanonicalRep a = property $ do
     let sa = serialize a
     sa' <- R.serialise <$> perturbCanonicity (R.deserialise sa)
-    let out = decodeFull @a $ sa'
+    let out = decodeFull @a decode label $ sa'
     pure $ case out of
         -- perturbCanonicity may have not changed anything. Decoding can
         -- succeed in this case.

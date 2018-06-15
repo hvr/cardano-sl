@@ -63,6 +63,7 @@ Library
                       , attoparsec
                       , base
                       , cardano-sl-util
+                      , cardano-sl-binary
                       , containers
                       , cryptonite
                       , binary >= 0.8

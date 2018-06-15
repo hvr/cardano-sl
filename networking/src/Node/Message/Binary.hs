@@ -15,7 +15,7 @@ import qualified Data.Binary.Put as Bin
 import qualified Data.ByteString.Builder.Extra as BS
 import qualified Data.ByteString.Lazy as LBS
 import qualified Data.Text as T
-import           Node.Message.Class (Serializable (..))
+import           Node.Message.Class (Serializable', Serializable (..))
 import           Node.Message.Decoder (Decoder (..), DecoderStep (..))
 
 data BinaryP
@@ -34,7 +34,7 @@ fromBinaryDecoder (Bin.Partial k)      = Partial (Decoder . pure . fromBinaryDec
 
 binarySerialization
     :: forall m t. (Bin.Binary t, Applicative m)
-    => Serializable BinaryP m t
+    => Serializable' BinaryP m t
 binarySerialization = Serializable packB unpackB
     where
     packB :: t -> m LBS.ByteString

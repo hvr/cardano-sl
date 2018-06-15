@@ -9,6 +9,7 @@ module Pos.Communication.Limits
        , module Pos.Communication.Limits.Instances
 
        , mlAbstractHash
+       , mlHeaderHash
 
        , mlXSignature
        , mlSignature
@@ -63,6 +64,7 @@ module Pos.Communication.Limits
 import           Universum
 
 import qualified Cardano.Crypto.Wallet as CC
+import           Crypto.Hash (Blake2b_256)
 import           Crypto.Hash.IO (HashAlgorithm, hashDigestSize)
 import qualified Crypto.SCRAPE as Scrape
 import           Data.Coerce (coerce)
@@ -71,7 +73,7 @@ import           Serokell.Data.Memory.Units (Byte)
 import           Pos.Binary.Class (AsBinary (..))
 import           Pos.Block.Network (MsgBlock (..), MsgGetBlocks (..), MsgGetHeaders (..),
                                     MsgHeaders (..))
-import           Pos.Core (BlockCount, BlockVersionData (..), EpochIndex, StakeholderId,
+import           Pos.Core (BlockCount, BlockVersionData (..), EpochIndex, HeaderHash, StakeholderId,
                            VssCertificate, UpId, coinPortionToDouble)
 import           Pos.Core.Block (Block, BlockHeader (..), GenesisBlock, GenesisBlockHeader,
                                  MainBlock, MainBlockHeader)
@@ -141,6 +143,9 @@ mlProof = 35
 
 mlAbstractHash :: forall algo a . HashAlgorithm algo => Limit (AbstractHash algo a)
 mlAbstractHash = fromIntegral (hashDigestSize (error "AbstractHash limit" :: algo) + 4)
+
+mlHeaderHash :: Limit HeaderHash
+mlHeaderHash = fromIntegral (hashDigestSize (error "HeaderHash Limit" :: Blake2b_256) + 4)
 
 mlEpochIndex :: Limit EpochIndex
 mlEpochIndex = 12
@@ -288,38 +293,38 @@ mlUpdateProposalAndVotes bvd = (,) <$> mlUpdateProposal bvd <+> vectorOf voteNum
 ----------------------------------------------------------------------------
 
 mlMsgGetBlocks :: Limit MsgGetBlocks
-mlMsgGetBlocks = MsgGetBlocks <$> mlAbstractHash <+> mlAbstractHash
+mlMsgGetBlocks = MsgGetBlocks <$> mlHeaderHash <+> mlHeaderHash
 
 mlMsgGetHeaders :: BlockCount -> Limit MsgGetHeaders
-mlMsgGetHeaders blkSecurityParam = MsgGetHeaders <$> vectorOf maxGetHeadersNum mlAbstractHash <+> mlMaybe mlAbstractHash
+mlMsgGetHeaders blkSecurityParam = MsgGetHeaders <$> vectorOf maxGetHeadersNum mlHeaderHash <+> mlMaybe mlHeaderHash
   where
     -- FIXME why?
     maxGetHeadersNum = ceiling $
         log (fromIntegral blkSecurityParam) + (5 :: Double)
 
-mlMsgHeaders :: BlockVersionData -> Int -> Limit MsgHeaders
+mlMsgHeaders :: BlockVersionData -> Int -> Limit (MsgHeaders attr)
 mlMsgHeaders bvd recoveryHeadersMessage = MsgHeaders . NewestFirst <$> vectorOfNE recoveryHeadersMessage (mlBlockHeader bvd)
 
-mlGenesisBlockHeader :: BlockVersionData -> Limit GenesisBlockHeader
+mlGenesisBlockHeader :: BlockVersionData -> Limit (GenesisBlockHeader attr)
 mlGenesisBlockHeader = Limit . fromIntegral . bvdMaxHeaderSize
 
-mlMainBlockHeader :: BlockVersionData -> Limit MainBlockHeader
+mlMainBlockHeader :: BlockVersionData -> Limit (MainBlockHeader attr)
 mlMainBlockHeader = Limit . fromIntegral . bvdMaxHeaderSize
 
-mlBlockHeader :: BlockVersionData -> Limit BlockHeader
+mlBlockHeader :: BlockVersionData -> Limit (BlockHeader attr)
 mlBlockHeader bvd = 1 + max (BlockHeaderGenesis <$> mlGenesisBlockHeader bvd)
                             (BlockHeaderMain    <$> mlMainBlockHeader bvd)
 
-mlGenesisBlock :: BlockVersionData -> Limit GenesisBlock
+mlGenesisBlock :: BlockVersionData -> Limit (GenesisBlock attr)
 mlGenesisBlock = Limit . fromIntegral . bvdMaxBlockSize
 
-mlMainBlock :: BlockVersionData -> Limit MainBlock
+mlMainBlock :: BlockVersionData -> Limit (MainBlock attr)
 mlMainBlock = Limit . fromIntegral . bvdMaxBlockSize
 
-mlBlock :: BlockVersionData -> Limit Block
+mlBlock :: BlockVersionData -> Limit (Block attr)
 mlBlock bvd = mlEither (mlGenesisBlock bvd) (mlMainBlock bvd)
 
-mlMsgBlock :: BlockVersionData -> Limit MsgBlock
+mlMsgBlock :: BlockVersionData -> Limit (MsgBlock attr)
 mlMsgBlock = fmap MsgBlock . mlBlock
 
 ----------------------------------------------------------------------------
