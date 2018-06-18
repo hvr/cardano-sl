@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveLift  #-}
 {-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE RankNTypes  #-}
+{-# LANGUAGE LambdaCase  #-}
 
 -- | Compile time information manipulations. Was introduced as
 -- CSL-1563 to avoid extra library recompilations when git revision
@@ -18,6 +19,7 @@ import           Universum
 
 import           Control.Exception.Safe (handleJust)
 import           Data.Default (Default (def))
+import           Data.FileEmbed (dummySpaceWith)
 import           Data.Reflection (Given (..), give, given)
 import qualified Data.Text as T
 import qualified Data.Text.Buildable
@@ -55,18 +57,22 @@ withCompileInfo = give
 retrieveCompileTimeInfo :: TH.Q TH.Exp
 retrieveCompileTimeInfo = do
     cti <- TH.runIO $ do
-      ctiGitRevision <- T.strip . fromString <$> retrieveGit
+      ctiGitRevision <- T.strip <$> retrieveGit
       pure $ CompileTimeInfo {..}
     TH.lift cti
   where
-    retrieveGit :: IO String
-    retrieveGit = lookupEnv "GITREV" >>= maybe runGitRevParse pure
-    runGitRevParse :: IO String
-    runGitRevParse = handleJust missingGit (const $ pure zeroRev) $ do
+    retrieveGit :: IO Text
+    retrieveGit = lookupEnv "NIX_BUILD_TOP" >>= \case
+      Just _ -> pure gitRev
+      Nothing -> runGitRevParse
+    runGitRevParse :: IO Text
+    runGitRevParse = handleJust missingGit (const $ pure gitRev) $ do
         (exitCode, output, _) <-
             readProcessWithExitCode "git" ["rev-parse", "--verify", "HEAD"] ""
         pure $ case exitCode of
-            ExitSuccess -> output
-            _           -> zeroRev
-    zeroRev = "0000000000000000000000000000000000000000"
+            ExitSuccess -> fromString output
+            _           -> gitRev
     missingGit e = if isDoesNotExistErrorType (ioeGetErrorType e) then Just () else Nothing
+
+gitRev :: Text
+gitRev = decodeUtf8 $(dummySpaceWith "gitrev" 40)
