@@ -405,18 +405,13 @@ genAddrStakeDistribution = Gen.choice gens
              mkMultiKeyDistr <$>
              genMultiKeyDistr
            ]
-    -- genMap = Gen.map (Range.linear 0 10) genPair
-    -- genPair = do
-    --   si <- genStakeholderId
-    --   cp <- genCoinPortion
-    --   pure (si, cp)
 
     -- Lifted from `Pos.Arbitrary.Core`. There are very particular constraints
     -- on the AddrStakeDistribution, which are mixed into encoding/decoding.
     genMultiKeyDistr :: Gen (Map StakeholderId CoinPortion)
     -- We don't want to generate too much, hence 'scale'.
     genMultiKeyDistr =
-        Gen.scale (min 16) $ do
+        Gen.scale (`mod` 16) $ do
             holder0 <- genStakeholderId
             holder1 <- Gen.filter (/= holder0) genStakeholderId
             -- TODO figure out a good size bound here
