@@ -756,7 +756,12 @@ genTxAttributes :: Gen TxAttributes
 genTxAttributes = pure $ mkAttributes ()
 
 genTxAux :: ProtocolMagic -> Gen TxAux
-genTxAux pm = TxAux <$> genTx <*> (genTxWitness pm)
+genTxAux pm = do --TxAux <$> genTx <*> (genTxWitness pm)
+    txInW <- genTxWitness pm
+    txIns <- genTxInList
+    txOuts <- genTxOutList
+    let tx = UnsafeTx txIns txOuts (mkAttributes ())
+    pure $ TxAux tx txInW
 
 -- TODO abstract out sampleText, define others as `coerce <$>` over it
 -- TODO consider removing `coerce`s
@@ -794,19 +799,7 @@ genTxOutList = Gen.nonEmpty (Range.linear 1 100) genTxOut
 
 -- TODO decide range
 genTxPayload :: ProtocolMagic -> Gen TxPayload
-genTxPayload pm = mkTxPayload <$> (Gen.list (Range.linear 0 10) txAux')
-  where
-      txAux' = do
-          txInW <- genTxWitness pm
-          txIns <- genTxInList
-          txOuts <- genTxOutList
-          let tx = UnsafeTx txIns txOuts (mkAttributes ())
-          pure $ TxAux tx txInW
--- TODO ^ should this replace genTxAux?
-
-    -- UnsafeTxPayload
-    --     <$> Gen.list (Range.constant 1 10) genTx
-    --     <*> Gen.list (Range.constant 1 10) genTxWitness
+genTxPayload pm = mkTxPayload <$> (Gen.list (Range.linear 0 10) (genTxAux pm))
 
 -- slow
 genTxProof :: ProtocolMagic -> Gen TxProof
