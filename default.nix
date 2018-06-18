@@ -167,6 +167,17 @@ let
       inherit system config gitrev pkgs;
       cardano-sl-explorer = cardanoPkgs.cardano-sl-explorer-static;
     });
+    all-cardano-sl = pkgs.buildEnv {
+      name = "all-cardano-sl";
+      paths = let
+        isCardanoSL = hasPrefix "cardano-sl";
+        fixupBenchmarks = drv: drv.overrideAttrs (a: {
+          installPhase = if (a.isLibrary or false || a.isExecutable or false)
+            then a.installPhase
+            else "mkdir -p $out";
+        });
+      in mapAttrsToList (n: fixupBenchmarks) (filterAttrs (name: v: isCardanoSL name) cardanoPkgs);
+    };
     mkDocker = { environment, connectArgs ? {} }: import ./docker.nix { inherit environment connect gitrev pkgs connectArgs; };
     stack2nix = import (pkgs.fetchFromGitHub {
       owner = "avieth";
