@@ -280,7 +280,9 @@ test-suite test
                        Test.Pos.Core.LimitsSpec
 
   build-depends:       base
+                     , base16-bytestring
                      , bytestring
+                     , cardano-crypto
                      , cardano-sl-binary
                      , cardano-sl-binary-test
                      , cardano-sl-core
@@ -290,6 +292,7 @@ test-suite test
                      , cardano-sl-util-test
                      , containers
                      , formatting
+                     , hedgehog
                      , hspec
                      , hedgehog
                      , QuickCheck
@@ -300,9 +303,11 @@ test-suite test
                      , unordered-containers
                      , vector
 
-  ghc-options:         -threaded
+  ghc-options:
+                       -threaded
                        -rtsopts
                        -Wall
+
 
   -- linker speed up for linux
   if os(linux)
