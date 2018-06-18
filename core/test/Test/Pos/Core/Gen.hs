@@ -473,7 +473,7 @@ genSharedSeed = SharedSeed <$> gen32Bytes
 
 genSlotLeaders :: Gen SlotLeaders
 genSlotLeaders = do
-    stakeHolderList <- Gen.list (Range.constant 1 10) genStakeholderId
+    stakeHolderList <- Gen.list (Range.linear 1 10) genStakeholderId
     pure $ fromJust $ nonEmpty stakeHolderList
 
 genStakeholderId :: Gen StakeholderId
@@ -733,7 +733,7 @@ genVssCertificatesHash =
 
 genVssCertificatesMap :: ProtocolMagic -> Gen VssCertificatesMap
 genVssCertificatesMap pm =
-    mkVssCertificatesMap <$> Gen.list (Range.constant 0 10) (genVssCertificate pm)
+    mkVssCertificatesMap <$> Gen.list (Range.linear 0 10) (genVssCertificate pm)
 
 ----------------------------------------------------------------------------
 -- Pos.Core.Txp Generators
@@ -781,7 +781,7 @@ genTxIn = Gen.choice gens
            ]
 
 genTxInList :: Gen (NonEmpty TxIn)
-genTxInList = Gen.nonEmpty (Range.constant 1 20) genTxIn
+genTxInList = Gen.nonEmpty (Range.linear 1 20) genTxIn
 
 genTxOut :: Gen TxOut
 genTxOut = TxOut <$> genAddress <*> genCoin
@@ -790,7 +790,7 @@ genTxOutAux :: Gen TxOutAux
 genTxOutAux = TxOutAux <$> genTxOut
 
 genTxOutList :: Gen (NonEmpty TxOut)
-genTxOutList = Gen.nonEmpty (Range.constant 1 100) genTxOut
+genTxOutList = Gen.nonEmpty (Range.linear 1 100) genTxOut
 
 -- TODO decide range
 genTxPayload :: ProtocolMagic -> Gen TxPayload
@@ -814,7 +814,7 @@ genTxProof pm =
     TxProof
         <$> genWord32
         <*> genMerkleRoot genTx
-        <*> genAbstractHash (Gen.list (Range.constant 1 20) (genTxWitness pm))
+        <*> genAbstractHash (Gen.list (Range.linear 1 20) (genTxWitness pm))
 
 genTxSig :: ProtocolMagic -> Gen TxSig
 genTxSig pm =
@@ -923,7 +923,7 @@ genUpdatePayload :: ProtocolMagic -> Gen UpdatePayload
 genUpdatePayload pm =
     UpdatePayload
         <$> Gen.maybe (genUpdateProposal pm)
-        <*> Gen.list (Range.constant 0 10) (genUpdateVote pm)
+        <*> Gen.list (Range.linear 0 10) (genUpdateVote pm)
 
 genUpdateProof :: ProtocolMagic -> Gen UpdateProof
 genUpdateProof pm = genAbstractHash (genUpdatePayload pm)
@@ -987,7 +987,7 @@ genAttributes genA =  mkAttributes <$> genA
 
 -- slow
 genMerkleTree :: Bi a => Gen a -> Gen (MerkleTree a)
-genMerkleTree genA = mkMerkleTree <$> Gen.list (Range.constant 0 10) genA
+genMerkleTree genA = mkMerkleTree <$> Gen.list (Range.linear 0 10) genA
 
 -- slow
 genMerkleRoot :: Bi a => Gen a -> Gen (MerkleRoot a)
@@ -1002,7 +1002,7 @@ customHashMapGen
     => Gen k -> Gen v -> Gen (HM.HashMap k v)
 customHashMapGen keyGen valGen =
     HM.fromList
-        <$> (Gen.list (Range.constant 1 10) $ (,) <$> keyGen <*> valGen)
+        <$> (Gen.list (Range.linear 1 10) $ (,) <$> keyGen <*> valGen)
 
 genBase16Bs :: Gen ByteString
 genBase16Bs = B16.encode <$> genBytes 32
