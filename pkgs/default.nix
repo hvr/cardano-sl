@@ -17112,6 +17112,7 @@ license = stdenv.lib.licenses.mit;
 , data-default
 , data-default-class
 , directory
+, file-embed
 , filepath
 , formatting
 , Glob
@@ -17165,6 +17166,7 @@ libraryHaskellDepends = [
 aeson
 base
 directory
+file-embed
 filepath
 parsers
 text
@@ -17204,6 +17206,7 @@ cryptonite
 data-default
 data-default-class
 directory
+file-embed
 filepath
 formatting
 Glob
@@ -17578,6 +17581,7 @@ license = stdenv.lib.licenses.mit;
 , directory
 , ether
 , exceptions
+, file-embed
 , filepath
 , formatting
 , hashable
@@ -17636,6 +17640,7 @@ deepseq
 directory
 ether
 exceptions
+file-embed
 filepath
 formatting
 hashable
@@ -17790,7 +17795,7 @@ license = stdenv.lib.licenses.mit;
 , monad-control
 , MonadRandom
 , mtl
-, node-ipc
+, cardano-sl-node-ipc
 , QuickCheck
 , quickcheck-instances
 , random
@@ -17870,7 +17875,7 @@ log-warper
 memory
 monad-control
 mtl
-node-ipc
+cardano-sl-node-ipc
 QuickCheck
 quickcheck-instances
 random
@@ -18012,7 +18017,7 @@ license = stdenv.lib.licenses.mit;
 , mtl
 , neat-interpolation
 , network-transport
-, node-ipc
+, cardano-sl-node-ipc
 , optparse-applicative
 , pretty-show
 , QuickCheck
@@ -18109,7 +18114,7 @@ memory
 mtl
 neat-interpolation
 network-transport
-node-ipc
+cardano-sl-node-ipc
 optparse-applicative
 QuickCheck
 reflection
@@ -57433,7 +57438,7 @@ description = "Knowledge of Nix's installation directories";
 license = stdenv.lib.licenses.bsd3;
 
 }) {};
-"node-ipc" = callPackage
+"cardano-sl-node-ipc" = callPackage
 ({
   mkDerivation
 , aeson
@@ -57449,7 +57454,7 @@ license = stdenv.lib.licenses.bsd3;
 }:
 mkDerivation {
 
-pname = "node-ipc";
+pname = "cardano-sl-node-ipc";
 version = "1.3.0";
 src = ./../node-ipc;
 libraryHaskellDepends = [
