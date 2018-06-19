@@ -7,14 +7,18 @@ module Test.Pos.Core.Bi
 import           Universum
 
 import           Cardano.Crypto.Wallet (xprv, xpub)
+import           Data.Coerce (coerce)
 import           Data.List.NonEmpty (fromList)
 import           Data.Time.Units (fromMicroseconds)
 import           Hedgehog (Property)
 import qualified Hedgehog as H
 
+import           Pos.Core.Block (GenesisBody (..), mkGenesisHeader)
 import           Pos.Core.Common (Coin (..), IsBootstrapEraAddr (..), Script (..),
                                   makePubKeyAddress)
-import           Pos.Core.Slotting (Timestamp (..))
+import           Pos.Core.Configuration (GenesisHash (..))
+import           Pos.Core.ProtocolConstants (ProtocolConstants (..))
+import           Pos.Core.Slotting (Timestamp (..), EpochIndex (..))
 import           Pos.Core.Txp (Tx (..), TxId, TxIn (..), TxOutAux (..), TxInWitness (..),
                                TxOut (..),TxSig, TxSigData (..))
 import           Pos.Crypto (Hash, ProtocolMagic (..), PublicKey (..), SecretKey (..),
@@ -34,24 +38,44 @@ import           Test.Pos.Crypto.Bi (getBytes)
 -- Pos.Core.Block
 --------------------------------------------------------------------------------
 
+--------------------------------------------------------------------------------
+-- BlockBodyAttributes
+--------------------------------------------------------------------------------
+
+golden_BlockBodyAttributes :: Property
+golden_BlockBodyAttributes = goldenTestBi bba "test/golden/BlockBodyAttributes"
+  where
+    bba = mkAttributes ()
+
 roundTripBlockBodyAttributesBi :: Property
 roundTripBlockBodyAttributesBi = eachOf 1000 genBlockBodyAttributes roundTripsBiBuildable
 
--- fails
--- recheck (Size 0) (Seed 12053450548120184651 7567781078738770419) roundTripBlockHeaderBi
+--------------------------------------------------------------------------------
+-- BlockHeader
+--------------------------------------------------------------------------------
+
+golden_BlockHeaderGenesis :: Property
+golden_BlockHeaderGenesis = goldenTestBi bhg "test/golden/BlockHeaderGenesis"
+  where
+    bhg = mkGenesisHeader (ProtocolMagic 0)
+                          (Left (GenesisHash prevHash))
+                          (EpochIndex 11)
+                          genesisBody
+    genesisBody = GenesisBody (sId1 :| [sId2])
+    prevHash = coerce (hash ("genesisHash" :: Text)) :: Hash a
+    sId1 = coerce (hash ("stakeholder 1" :: Text))
+    sId2 = coerce (hash ("stakeholder 2" :: Text))
+
 roundTripBlockHeaderBi :: Property
-roundTripBlockHeaderBi = eachOf 10 genBlockHeader roundTripsBiBuildable
+roundTripBlockHeaderBi = eachOf 10 (feedPMC genBlockHeader) roundTripsBiBuildable
 
 roundTripBlockHeaderAttributesBi :: Property
 roundTripBlockHeaderAttributesBi = eachOf 1000 genBlockHeaderAttributes roundTripsBiBuildable
 
 -- slow
--- fails
--- recheck (Size 1) (Seed 8796295392233115961 17003651516827452701) roundTripBlockSignatureBi
 roundTripBlockSignatureBi :: Property
-roundTripBlockSignatureBi = eachOf 1000 (feedPM genBlockSignature) roundTripsBiBuildable
+roundTripBlockSignatureBi = eachOf 10 (feedPMC genBlockSignature) roundTripsBiBuildable
 
--- fails
 roundTripGenesisBlockHeaderBi :: Property
 roundTripGenesisBlockHeaderBi = eachOf 1000 (feedPM genGenesisBlockHeader) roundTripsBiBuildable
 
@@ -68,16 +92,15 @@ roundTripGenesisConsensusDataBi = eachOf 1000 genGenesisConsensusData roundTrips
 roundTripGenesisProofBi :: Property
 roundTripGenesisProofBi = eachOf 1000 genGenesisProof roundTripsBiBuildable
 
--- slow
--- fails
--- recheck (Size 0) (Seed 2267974326261439600 3208838063806141983) roundTripMainBlockHeaderBi
+-- slow (seems probabilistic - some fast, some slow)
 roundTripMainBlockHeaderBi :: Property
-roundTripMainBlockHeaderBi = eachOf 1000 genMainBlockHeader roundTripsBiBuildable
+roundTripMainBlockHeaderBi = eachOf 10 (feedPMC genMainBlockHeader) roundTripsBiBuildable
 
--- fails
--- recheck (Size 0) (Seed 7561563662088777279 876367418530652631) roundTripMainBodyBi
 roundTripMainBodyBi :: Property
 roundTripMainBodyBi = eachOf 10 (feedPM genMainBody) roundTripsBiShow
+
+roundTripMainConsensusData :: Property
+roundTripMainConsensusData = eachOf 50 (feedPMC genMainConsensusData) roundTripsBiShow
 
 roundTripMainExtraBodyDataBi :: Property
 roundTripMainExtraBodyDataBi = eachOf 1000 genMainExtraBodyData roundTripsBiBuildable
@@ -87,11 +110,11 @@ roundTripMainExtraHeaderDataBi = eachOf 1000 genMainExtraHeaderData roundTripsBi
 
 -- slow
 roundTripMainProofBi :: Property
-roundTripMainProofBi = eachOf 10 genMainProof roundTripsBiBuildable
+roundTripMainProofBi = eachOf 10 (feedPM genMainProof) roundTripsBiBuildable
 
--- fails
+-- slow, probabilistic
 roundTripMainToSignBi :: Property
-roundTripMainToSignBi = eachOf 1000 genMainToSign roundTripsBiShow
+roundTripMainToSignBi = eachOf 10 (feedPMC genMainToSign) roundTripsBiShow
 
 
 -- group 1
@@ -177,7 +200,7 @@ roundTripLightDlgIndicesBi = eachOf 1000 genLightDlgIndices roundTripsBiBuildabl
 
 -- also kinda slow
 roundTripProxySKBlockInfoBi :: Property
-roundTripProxySKBlockInfoBi = eachOf 500 genProxySKBlockInfo roundTripsBiShow
+roundTripProxySKBlockInfoBi = eachOf 500 (feedPM genProxySKBlockInfo) roundTripsBiShow
 
 -- also kinda slow
 roundTripProxySKHeavyBi :: Property
@@ -219,40 +242,23 @@ roundTripEpochIndexBi :: Property
 roundTripEpochIndexBi = eachOf 1000 genEpochIndex roundTripsBiBuildable
 
 roundTripEpochOrSlotBi :: Property
-roundTripEpochOrSlotBi = eachOf 1000 genEpochOrSlot roundTripsBiBuildable
+roundTripEpochOrSlotBi = eachOf 1000 (feedPC genEpochOrSlot) roundTripsBiBuildable
 
 roundTripFlatSlotIdBi :: Property
 roundTripFlatSlotIdBi = eachOf 1000 genFlatSlotId roundTripsBiBuildable
 
 roundTripLocalSlotIndexBi :: Property
-roundTripLocalSlotIndexBi = eachOf 1000 genLocalSlotIndex roundTripsBiBuildable
+roundTripLocalSlotIndexBi = eachOf 1000 (feedPC genLocalSlotIndex) roundTripsBiBuildable
 
 roundTripSlotCountBi :: Property
 roundTripSlotCountBi = eachOf 1000 genSlotCount roundTripsBiBuildable
 
 roundTripSlotIdBi :: Property
-roundTripSlotIdBi = eachOf 1000 genSlotId roundTripsBiBuildable
+roundTripSlotIdBi = eachOf 1000 (feedPC genSlotId) roundTripsBiBuildable
 
 roundTripTimeDiffBi :: Property
 roundTripTimeDiffBi = eachOf 1000 genTimeDiff roundTripsBiBuildable
 
-
--- Jordan's types
-
--- slow
-roundTripSscPayloadBi :: Property
-roundTripSscPayloadBi = eachOf 20 (feedPM genSscPayload) roundTripsBiBuildable
-
-roundTripUpdatePayloadBi :: Property
-roundTripUpdatePayloadBi = eachOf 100 (feedPM genUpdatePayload) roundTripsBiBuildable
-
--- fails
-roundTripTxPayloadBi :: Property
-roundTripTxPayloadBi = eachOf 100 (feedPM genTxPayload) roundTripsBiShow
-
--- fails
-roundTripTxAuxBi :: Property
-roundTripTxAuxBi = eachOf 1000 (feedPM genTxAux) roundTripsBiBuildable
 
 -- JORDAN's TYPES
 
@@ -401,8 +407,9 @@ roundTripSoftwareVersion = eachOf 10 genSoftwareVersion roundTripsBiBuildable
 -- SscPayload
 --------------------------------------------------------------------------------
 
+-- slow
 roundTripSscPayload :: Property
-roundTripSscPayload = eachOf 10 (genSscPayload $ ProtocolMagic 0) roundTripsBiBuildable
+roundTripSscPayload = eachOf 10 (feedPM genSscPayload) roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
 -- SscProof
@@ -448,8 +455,9 @@ roundTripTxAttributes = eachOf 10 genTxAttributes roundTripsBiBuildable
 -- TxAux
 --------------------------------------------------------------------------------
 
+-- fails
 roundTripTxAux :: Property
-roundTripTxAux = eachOf 10 (genTxAux $ ProtocolMagic 0) roundTripsBiBuildable
+roundTripTxAux = eachOf 1000 (feedPM genTxAux) roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
 -- Tx Hash
@@ -572,8 +580,9 @@ roundTripTxOutAux = eachOf 10 genTxOutAux roundTripsBiBuildable
 -- TxPayload
 --------------------------------------------------------------------------------
 
+-- fails
 roundTripTxPayload :: Property
-roundTripTxPayload = eachOf 10 (genTxPayload $ ProtocolMagic 0) roundTripsBiShow
+roundTripTxPayload = eachOf 1000 (feedPM genTxPayload) roundTripsBiShow
 
 --------------------------------------------------------------------------------
 -- TxProof
@@ -631,7 +640,7 @@ roundTripUpdateData = eachOf 10 genUpdateData roundTripsBiBuildable
 --------------------------------------------------------------------------------
 
 roundTripUpdatePayload :: Property
-roundTripUpdatePayload = eachOf 10 (genUpdatePayload $ ProtocolMagic 0) roundTripsBiBuildable
+roundTripUpdatePayload = eachOf 10 (feedPM genUpdatePayload) roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
 -- UpdateProof
@@ -652,7 +661,7 @@ roundTripUpdateProposal = eachOf 10 (genUpdateProposal $ ProtocolMagic 0) roundT
 --------------------------------------------------------------------------------
 
 roundTripUpdateProposals :: Property
-roundTripUpdateProposals = eachOf 10 genUpdateProposals roundTripsBiShow
+roundTripUpdateProposals = eachOf 10 (feedPM genUpdateProposals) roundTripsBiShow
 
 --------------------------------------------------------------------------------
 -- UpdateProposalToSign
@@ -673,7 +682,7 @@ roundTripUpdateVote = eachOf 10 (genUpdateVote $ ProtocolMagic 0) roundTripsBiBu
 --------------------------------------------------------------------------------
 
 roundTripUpId :: Property
-roundTripUpId = eachOf 10 genUpId roundTripsBiBuildable
+roundTripUpId = eachOf 10 (feedPM genUpId) roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
 -- UpsData
@@ -687,7 +696,7 @@ roundTripUpsData = eachOf 10 genUpsData roundTripsBiShow
 --------------------------------------------------------------------------------
 
 roundTripVoteId :: Property
-roundTripVoteId = eachOf 10 genVoteId roundTripsBiBuildable
+roundTripVoteId = eachOf 10 (feedPM genVoteId) roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
 -- VssCertificate
@@ -701,7 +710,7 @@ roundTripVssCertificate = eachOf 10 (genVssCertificate $ ProtocolMagic 0) roundT
 --------------------------------------------------------------------------------
 
 roundTripVssCertificatesHash :: Property
-roundTripVssCertificatesHash = eachOf 10 genVssCertificatesHash roundTripsBiBuildable
+roundTripVssCertificatesHash = eachOf 10 (feedPM genVssCertificatesHash) roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
 -- VssCertificatesMap
@@ -718,6 +727,13 @@ roundTripVssCertificatesMap = eachOf 10 (genVssCertificatesMap $ ProtocolMagic 0
 feedPM :: (ProtocolMagic -> H.Gen a) -> H.Gen a
 feedPM genA = genA =<< genProtocolMagic
 
+feedPC :: (ProtocolConstants -> H.Gen a) -> H.Gen a
+feedPC genA = genA =<< genProtocolConstants
+
+feedPMC :: (ProtocolMagic -> ProtocolConstants -> H.Gen a) -> H.Gen a
+feedPMC genA = do pm <- genProtocolMagic
+                  pc <- genProtocolConstants
+                  genA pm pc
 
 -----------------------------------------------------------------------
 -- Main test export
@@ -756,7 +772,6 @@ txSig = sign (ProtocolMagic 0) SignForTestingOnly skey txSigData
 
 txSigData :: TxSigData
 txSigData = TxSigData hashTx
-
 
 --------------------------------------------------------------------------------
 

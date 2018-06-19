@@ -189,7 +189,8 @@ golden_ProxyCert = goldenTestBi pcert "test/golden/ProxyCert"
     pcert      = safeCreateProxyCert (ProtocolMagic 0) (FakeSigner skey) pkey ()
 
 genUnitProxyCert :: Gen (ProxyCert ())
-genUnitProxyCert = genProxyCert $ pure ()
+genUnitProxyCert = do pm <- genProtocolMagic
+                      genProxyCert pm $ pure ()
 
 roundTripProxyCertBi :: Property
 roundTripProxyCertBi = eachOf 100 genUnitProxyCert roundTripsBiBuildable
@@ -209,7 +210,8 @@ golden_ProxySecretKey = goldenTestBi psk "test/golden/ProxySecretKey"
     psk        = safeCreatePsk (ProtocolMagic 0) (FakeSigner skey) pkey ()
 
 genUnitProxySecretKey :: Gen (ProxySecretKey ())
-genUnitProxySecretKey = genProxySecretKey $ pure ()
+genUnitProxySecretKey = do pm <- genProtocolMagic
+                           genProxySecretKey pm $ pure ()
 
 roundTripProxySecretKeyBi :: Property
 roundTripProxySecretKeyBi =
@@ -234,7 +236,9 @@ roundTripProxySignatureBi :: Property
 roundTripProxySignatureBi = eachOf 100
                                    genUnitProxySignature
                                    roundTripsBiBuildable
-    where genUnitProxySignature = genProxySignature (pure ()) (pure ())
+    where genUnitProxySignature = do
+              pm <- genProtocolMagic
+              genProxySignature pm (pure ()) (pure ())
 
 --------------------------------------------------------------------------------
 -- SharedSecretData
