@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 module Pos.Core.Genesis.WStakeholders
        ( GenesisWStakeholders (..)
        ) where
@@ -9,6 +10,7 @@ import           Formatting (bprint, (%))
 import           Serokell.Util (mapJson)
 
 import           Pos.Core.Common (StakeholderId)
+import           Data.Semigroup (Semigroup)
 
 -- | Wrapper around weighted stakeholders map to be used in genesis
 -- core data.
@@ -19,7 +21,12 @@ import           Pos.Core.Common (StakeholderId)
 -- in proportion of 1:3.
 newtype GenesisWStakeholders = GenesisWStakeholders
     { getGenesisWStakeholders :: Map StakeholderId Word16
-    } deriving (Show, Eq, Monoid)
+    }
+#if MIN_VERSION_base(4,9,0)
+  deriving (Show, Eq, Semigroup, Monoid)
+#else
+  deriving (Show, Eq, Monoid)
+#endif
 
 instance Buildable GenesisWStakeholders where
     build (GenesisWStakeholders m) =

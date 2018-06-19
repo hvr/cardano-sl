@@ -3,6 +3,7 @@
 {-# LANGUAGE RankNTypes    #-}
 {-# LANGUAGE TypeFamilies  #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE CPP           #-}
 
 module Pos.Util.Util
        (
@@ -241,7 +242,11 @@ instance (MonadTrans t, PowerLift m n, Monad n) => PowerLift m (t n) where
 ----------------------------------------------------------------------------
 
 newtype MinMax a = MinMax (Smg.Option (Smg.Min a, Smg.Max a))
-    deriving (Monoid)
+#if MIN_VERSION_base(4,9,0)
+  deriving (Smg.Semigroup, Monoid)
+#else
+  deriving (Monoid)
+#endif
 
 _MinMax :: Iso' (MinMax a) (Maybe (a, a))
 _MinMax = coerced
