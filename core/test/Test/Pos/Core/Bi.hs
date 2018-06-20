@@ -89,7 +89,6 @@ roundTripBlockHeaderBi = eachOf 10 (feedPMC genBlockHeader) roundTripsBiBuildabl
 roundTripBlockHeaderAttributesBi :: Property
 roundTripBlockHeaderAttributesBi = eachOf 1000 genBlockHeaderAttributes roundTripsBiBuildable
 
--- slow
 roundTripBlockSignatureBi :: Property
 roundTripBlockSignatureBi = eachOf 10 (feedPMC genBlockSignature) roundTripsBiBuildable
 
@@ -121,15 +120,14 @@ golden_GenesisProof = goldenTestBi gp "test/golden/GenesisProof"
 roundTripGenesisProofBi :: Property
 roundTripGenesisProofBi = eachOf 1000 genGenesisProof roundTripsBiBuildable
 
--- slow (seems probabilistic - some fast, some slow)
 roundTripMainBlockHeaderBi :: Property
-roundTripMainBlockHeaderBi = eachOf 10 (feedPMC genMainBlockHeader) roundTripsBiBuildable
+roundTripMainBlockHeaderBi = eachOf 20 (feedPMC genMainBlockHeader) roundTripsBiBuildable
 
 roundTripMainBodyBi :: Property
-roundTripMainBodyBi = eachOf 10 (feedPM genMainBody) roundTripsBiShow
+roundTripMainBodyBi = eachOf 20 (feedPM genMainBody) roundTripsBiShow
 
 roundTripMainConsensusData :: Property
-roundTripMainConsensusData = eachOf 50 (feedPMC genMainConsensusData) roundTripsBiShow
+roundTripMainConsensusData = eachOf 20 (feedPMC genMainConsensusData) roundTripsBiShow
 
 roundTripMainExtraBodyDataBi :: Property
 roundTripMainExtraBodyDataBi = eachOf 1000 genMainExtraBodyData roundTripsBiBuildable
@@ -137,13 +135,11 @@ roundTripMainExtraBodyDataBi = eachOf 1000 genMainExtraBodyData roundTripsBiBuil
 roundTripMainExtraHeaderDataBi :: Property
 roundTripMainExtraHeaderDataBi = eachOf 1000 genMainExtraHeaderData roundTripsBiBuildable
 
--- slow
 roundTripMainProofBi :: Property
-roundTripMainProofBi = eachOf 10 (feedPM genMainProof) roundTripsBiBuildable
+roundTripMainProofBi = eachOf 20 (feedPM genMainProof) roundTripsBiBuildable
 
--- slow, probabilistic
 roundTripMainToSignBi :: Property
-roundTripMainToSignBi = eachOf 10 (feedPMC genMainToSign) roundTripsBiShow
+roundTripMainToSignBi = eachOf 20 (feedPMC genMainToSign) roundTripsBiShow
 
 
 -- group 1
@@ -363,7 +359,6 @@ roundTripTxSizeLinearBi = eachOf 1000 genTxSizeLinear roundTripsBiBuildable
 -- roundTripCoreConfigurationBi :: Property
 -- roundTripCoreConfigurationBi = eachOf 1000 genCoreConfiguration roundTripsBiBuildable
 
--- slow!!! shrink gens or # tests?
 roundTripDlgPayloadBi :: Property
 roundTripDlgPayloadBi = eachOf 100 (feedPM genDlgPayload) roundTripsBiBuildable
 
@@ -373,13 +368,11 @@ roundTripHeavyDlgIndexBi = eachOf 1000 genHeavyDlgIndex roundTripsBiBuildable
 roundTripLightDlgIndicesBi :: Property
 roundTripLightDlgIndicesBi = eachOf 1000 genLightDlgIndices roundTripsBiBuildable
 
--- also kinda slow
 roundTripProxySKBlockInfoBi :: Property
-roundTripProxySKBlockInfoBi = eachOf 500 (feedPM genProxySKBlockInfo) roundTripsBiShow
+roundTripProxySKBlockInfoBi = eachOf 200 (feedPM genProxySKBlockInfo) roundTripsBiShow
 
--- also kinda slow
 roundTripProxySKHeavyBi :: Property
-roundTripProxySKHeavyBi = eachOf 500 (feedPM genProxySKHeavy) roundTripsBiBuildable
+roundTripProxySKHeavyBi = eachOf 200 (feedPM genProxySKHeavy) roundTripsBiBuildable
 
 -- no Bi instance
 -- roundTripFakeAvvmOptionsBi :: Property
@@ -620,7 +613,6 @@ roundTripSoftwareVersion = eachOf 10 genSoftwareVersion roundTripsBiBuildable
 -- SscPayload
 --------------------------------------------------------------------------------
 
--- slow
 roundTripSscPayload :: Property
 roundTripSscPayload = eachOf 10 (feedPM genSscPayload) roundTripsBiBuildable
 

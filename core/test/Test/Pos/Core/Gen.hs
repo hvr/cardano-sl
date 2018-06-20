@@ -523,7 +523,7 @@ genCoreConfiguration pm =
 
 genDlgPayload :: ProtocolMagic -> Gen DlgPayload
 genDlgPayload pm =
-    UnsafeDlgPayload <$> Gen.list (Range.constant 0 10) (genProxySKHeavy pm)
+    UnsafeDlgPayload <$> Gen.list (Range.linear 0 5) (genProxySKHeavy pm)
 
 genHeavyDlgIndex :: Gen HeavyDlgIndex
 genHeavyDlgIndex = HeavyDlgIndex <$> genEpochIndex
@@ -681,7 +681,7 @@ genCommitmentsMap pm = mkCommitmentsMap <$> Gen.list range (genSignedCommitment 
 
 genInnerSharesMap :: Gen InnerSharesMap
 genInnerSharesMap = do
-    hMS <- Gen.int (Range.constant 0 20)
+    hMS <- Gen.int (Range.linear 0 10)
     stakeholderId <- Gen.list (Range.singleton hMS) genStakeholderId
     nonEmptyDS <- Gen.nonEmpty (Range.singleton hMS) (asBinary <$> genDecShare)
     pure $ HM.fromList $ zip stakeholderId [nonEmptyDS]
@@ -691,7 +691,7 @@ genOpening = snd <$> genCommitmentOpening
 
 genOpeningsMap :: Gen OpeningsMap
 genOpeningsMap = do
-    hMapSize <- Gen.int (Range.constant 0 20)
+    hMapSize <- Gen.int (Range.linear 0 10)
     stakeholderId <- Gen.list (Range.singleton hMapSize) genStakeholderId
     opening <- Gen.list (Range.singleton hMapSize) genOpening
     pure $ HM.fromList $ zip stakeholderId opening
@@ -703,7 +703,7 @@ genSharesDistribution = genCustomHashMap genStakeholderId genWord16
 
 genSharesMap :: Gen SharesMap
 genSharesMap = do
-    hMapSize <- Gen.int (Range.linear 0 15)
+    hMapSize <- Gen.int (Range.linear 0 10)
     stakeholderId <- Gen.list (Range.singleton hMapSize) genStakeholderId
     innerSharesMap <- Gen.list (Range.singleton hMapSize) genInnerSharesMap
     pure $ HM.fromList $ zip stakeholderId innerSharesMap
@@ -714,9 +714,8 @@ genSignedCommitment pm =
 
 -- We mod the size to the range [0,5000) to give relatively large tests which
 -- are still reasonably fast to generate.
--- TODO fix size
 genSscPayload :: ProtocolMagic -> Gen SscPayload
-genSscPayload pm = Gen.scale (`mod` 5) $
+genSscPayload pm = Gen.scale (`mod` 5000) $
     Gen.choice
         [ CertificatesPayload <$> genVssCertificatesMap pm
         , CommitmentsPayload <$> genCommitmentsMap pm <*> genVssCertificatesMap pm
@@ -740,7 +739,7 @@ genVssCertificatesHash pm =
 
 genVssCertificatesMap :: ProtocolMagic -> Gen VssCertificatesMap
 genVssCertificatesMap pm =
-    mkVssCertificatesMap <$> Gen.list (Range.linear 0 10) (genVssCertificate pm)
+    mkVssCertificatesMap <$> Gen.list (Range.linear 0 5) (genVssCertificate pm)
 
 ----------------------------------------------------------------------------
 -- Pos.Core.Txp Generators
@@ -813,13 +812,12 @@ genTxOutList = Gen.nonEmpty (Range.linear 1 100) genTxOut
 genTxPayload :: ProtocolMagic -> Gen TxPayload
 genTxPayload pm = mkTxPayload <$> (Gen.list (Range.linear 0 10) (genTxAux pm))
 
--- slow
 genTxProof :: ProtocolMagic -> Gen TxProof
 genTxProof pm =
     TxProof
         <$> genWord32
         <*> genMerkleRoot genTx
-        <*> genAbstractHash (Gen.list (Range.linear 1 20) (genTxWitness pm))
+        <*> genAbstractHash (Gen.list (Range.linear 1 5) (genTxWitness pm))
 
 genTxSig :: ProtocolMagic -> Gen TxSig
 genTxSig pm =
@@ -963,7 +961,7 @@ genUpId pm = genAbstractHash (genUpdateProposal pm)
 
 genUpsData :: Gen (HM.HashMap SystemTag UpdateData)
 genUpsData = do
-    hMapSize <- Gen.int (Range.constant 0 20)
+    hMapSize <- Gen.int (Range.linear 0 20)
     sysTagList <- Gen.list (Range.singleton hMapSize) genSystemTag
     upDataList <- Gen.list (Range.singleton hMapSize) genUpdateData
     pure $ HM.fromList $ zip sysTagList upDataList
