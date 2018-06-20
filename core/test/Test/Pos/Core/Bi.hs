@@ -16,7 +16,7 @@ import           Data.Time.Units (fromMicroseconds)
 import           Hedgehog (Property)
 import qualified Hedgehog as H
 
-import           Pos.Core.Block (GenesisBody (..), mkGenesisHeader)
+import           Pos.Core.Block (GenesisBody (..), GenesisProof (..), HeaderHash, mkGenesisHeader)
 import           Pos.Core.Common (AddrAttributes (..), AddrSpendingData (..),
                                   AddrStakeDistribution (..), AddrType (..), BlockCount (..),
                                   ChainDifficulty (..), Coeff (..), Coin (..), CoinPortion (..),
@@ -105,6 +105,18 @@ roundTripGenesisConsensusDataBi = eachOf 1000 genGenesisConsensusData roundTrips
 -- GenesisHash is just a newtype around a Hash, and lacks Bi instances. The newtype is
 -- unwrapped when constructing a block, so it doesn't appear anywhere and we don't need
 -- to test it.
+
+-- HeaderHash
+golden_HeaderHash :: Property
+golden_HeaderHash = goldenTestBi hh "test/golden/HeaderHash"
+  where hh = coerce (hash ("HeaderHash" :: Text)) :: HeaderHash
+
+roundTripHeaderHashBi :: Property
+roundTripHeaderHashBi = eachOf 1000 genHeaderHash roundTripsBiBuildable
+
+golden_GenesisProof :: Property
+golden_GenesisProof = goldenTestBi gp "test/golden/GenesisProof"
+  where gp = GenesisProof (abstractHash exampleSlotLeaders)
 
 roundTripGenesisProofBi :: Property
 roundTripGenesisProofBi = eachOf 1000 genGenesisProof roundTripsBiBuildable
@@ -284,12 +296,7 @@ roundTripSharedSeedBi = eachOf 1000 genSharedSeed roundTripsBiBuildable
 
 -- SlotLeaders
 golden_SlotLeaders :: Property
-golden_SlotLeaders = goldenTestBi sls "test/golden/SlotLeaders"
-  where
-    sls = map abstractHash (pk1 :| [pk2, pk3]) :: SlotLeaders
-    Right pk1 = PublicKey <$> xpub (getBytes  0 64)
-    Right pk2 = PublicKey <$> xpub (getBytes 16 64)
-    Right pk3 = PublicKey <$> xpub (getBytes 32 64)
+golden_SlotLeaders = goldenTestBi exampleSlotLeaders "test/golden/SlotLeaders"
 
 roundTripSlotLeadersBi :: Property
 roundTripSlotLeadersBi = eachOf 1000 genSlotLeaders roundTripsBiShow
@@ -1002,7 +1009,12 @@ exampleStakesList = zip sis coins
     Right si2 = abstractHash . PublicKey <$> xpub (getBytes 15 64)
     Right si3 = abstractHash . PublicKey <$> xpub (getBytes 30 64)
 
-
+exampleSlotLeaders :: SlotLeaders
+exampleSlotLeaders = map abstractHash (pk1 :| [pk2, pk3])
+  where
+    Right pk1 = PublicKey <$> xpub (getBytes  0 64)
+    Right pk2 = PublicKey <$> xpub (getBytes 16 64)
+    Right pk3 = PublicKey <$> xpub (getBytes 32 64)
 
 -----------------------------------------------------------------------
 -- Main test export
