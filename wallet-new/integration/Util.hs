@@ -49,6 +49,15 @@ randomExternalWallet walletOp =
     orFail =
         either (error . show) identity
 
+randomExternalWalletWithPublicKey :: WalletOperation -> PublicKey -> IO NewExternalWallet
+randomExternalWalletWithPublicKey walletOp publicKey =
+    generate $
+        NewExternalWallet
+            <$> pure (encodeBase58PublicKey publicKey)
+            <*> arbitrary
+            <*> pure "External Wallet"
+            <*> pure walletOp
+
 createWalletCheck :: WalletClient IO -> NewWallet -> IO Wallet
 createWalletCheck wc newWallet = do
     result <- fmap wrData <$> postWallet wc newWallet
@@ -92,6 +101,21 @@ sampleWallet wRef wc = do
         Nothing -> do
             w <- randomWallet CreateWallet
             w' <- createWalletCheck wc w
+            didWrite <- tryPutMVar wRef w'
+            if didWrite
+                then pure w'
+                else readMVar wRef
+
+sampleExternalWallet :: WalletRef -> WalletClient IO -> IO Wallet
+sampleExternalWallet wRef wc = do
+    mwallet <- tryTakeMVar wRef
+    case mwallet of
+        Just wallet -> do
+            putMVar wRef wallet
+            pure wallet
+        Nothing -> do
+            w <- randomExternalWallet CreateWallet
+            w' <- createExternalWalletCheck wc w
             didWrite <- tryPutMVar wRef w'
             if didWrite
                 then pure w'
