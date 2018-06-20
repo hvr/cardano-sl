@@ -15587,10 +15587,12 @@ license = stdenv.lib.licenses.mit;
 , aeson
 , ansi-terminal
 , base
+, base16-bytestring
 , base58-bytestring
 , bytestring
 , Cabal
 , canonical-json
+, cardano-crypto
 , cardano-sl-binary
 , cardano-sl-binary-test
 , cardano-sl-crypto
@@ -15612,6 +15614,7 @@ license = stdenv.lib.licenses.mit;
 , formatting
 , generic-arbitrary
 , hashable
+, hedgehog
 , hspec
 , lens
 , log-warper
@@ -15697,18 +15700,26 @@ cpphs
 ];
 testHaskellDepends = [
 base
+base16-bytestring
 bytestring
+cardano-crypto
 cardano-sl-binary
 cardano-sl-binary-test
 cardano-sl-crypto
+cardano-sl-crypto-test
+cardano-sl-util
 cardano-sl-util-test
+containers
 formatting
+hedgehog
 hspec
 QuickCheck
 serokell-util
 text
+time-units
 universum
 unordered-containers
+vector
 ];
 testToolDepends = [
 cpphs
@@ -15722,11 +15733,17 @@ license = stdenv.lib.licenses.mit;
 ({
   mkDerivation
 , base
+, base16-bytestring
 , bytestring
+, cardano-crypto
 , cardano-sl-binary
+, cardano-sl-binary-test
 , cardano-sl-core
 , cardano-sl-crypto
 , cardano-sl-crypto-test
+, cardano-sl-util
+, cardano-sl-util-test
+, containers
 , cpphs
 , cryptonite
 , cryptonite-openssl
@@ -15747,11 +15764,17 @@ version = "1.3.0";
 src = ./../core/test;
 libraryHaskellDepends = [
 base
+base16-bytestring
 bytestring
+cardano-crypto
 cardano-sl-binary
+cardano-sl-binary-test
 cardano-sl-core
 cardano-sl-crypto
 cardano-sl-crypto-test
+cardano-sl-util
+cardano-sl-util-test
+containers
 cryptonite
 cryptonite-openssl
 hedgehog
@@ -15874,7 +15897,9 @@ license = stdenv.lib.licenses.mit;
   mkDerivation
 , base
 , bytestring
+, cardano-crypto
 , cardano-sl-binary
+, cardano-sl-binary-test
 , cardano-sl-crypto
 , cardano-sl-util
 , cardano-sl-util-test
@@ -15895,7 +15920,9 @@ src = ./../crypto/test;
 libraryHaskellDepends = [
 base
 bytestring
+cardano-crypto
 cardano-sl-binary
+cardano-sl-binary-test
 cardano-sl-crypto
 cardano-sl-util
 cardano-sl-util-test
