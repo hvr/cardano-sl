@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-unused-imports   #-}
+{-# OPTIONS_GHC -Wno-dodgy-imports   #-}
 module Test.Pos.Core.Bi
     ( tests
     -- , roundTripAddressBi
@@ -12,106 +14,84 @@ import           Data.Fixed (Fixed (..))
 import qualified Data.HashMap.Strict as HM
 import           Data.List.NonEmpty (fromList)
 import qualified Data.Map as M
-import           Data.Time.Units (fromMicroseconds)
+import           Data.Maybe (fromJust)
+import           Data.Time.Units (Millisecond, fromMicroseconds)
+import qualified Data.Vector as V
 import           Hedgehog (Property)
 import qualified Hedgehog as H
 
-import           Pos.Core.Block (BlockBodyAttributes, BlockHeader (..),
-                                 BlockHeaderAttributes, BlockSignature (..),
-                                 GenesisBlockHeader, GenesisBody (..),
-                                 GenesisConsensusData (..), GenesisProof (..),
-                                 GenesisExtraHeaderData (..), HeaderHash,
-                                 MainBlockHeader, MainBody (..),
-                                 MainConsensusData (..),
-                                 MainExtraBodyData (..),
-                                 MainExtraHeaderData (..), MainProof (..),
-                                 MainToSign (..), mkMainHeaderExplicit,
-                                 mkGenericHeader, mkGenesisHeader)
-import           Pos.Core.Common (Address (..), AddrAttributes (..),
-                                  AddrSpendingData (..),
-                                  AddrStakeDistribution (..), AddrType (..),
-                                  BlockCount (..), ChainDifficulty (..),
-                                  Coeff (..), Coin (..), CoinPortion (..),
-                                  coinPortionDenominator,
-                                  IsBootstrapEraAddr (..), makeAddress,
-                                  makePubKeyAddress, mkMultiKeyDistr,
-                                  Script (..), ScriptVersion, SharedSeed (..),
-                                  SlotLeaders, StakeholderId, StakesList,
-                                  StakesMap, TxFeePolicy (..),
-                                  TxSizeLinear (..))
-import           Pos.Core.Configuration (CoreConfiguration (..),
-                                         GenesisConfiguration (..),
+import           Pos.Binary.Class (Raw (..), asBinary)
+import           Pos.Core.Block (BlockBodyAttributes, BlockHeader (..), BlockHeaderAttributes,
+                                 BlockSignature (..), GenesisBlockHeader, GenesisBody (..),
+                                 GenesisBody (..), GenesisConsensusData (..),
+                                 GenesisExtraHeaderData (..), GenesisProof (..), HeaderHash,
+                                 MainBlockHeader, MainBody (..), MainConsensusData (..),
+                                 MainExtraBodyData (..), MainExtraHeaderData (..), MainProof (..),
+                                 MainToSign (..), mkGenericHeader, mkGenesisHeader,
+                                 mkMainHeaderExplicit)
+import           Pos.Core.Common (AddrAttributes (..), AddrSpendingData (..),
+                                  AddrStakeDistribution (..), AddrType (..), Address (..),
+                                  BlockCount (..), ChainDifficulty (..), Coeff (..), Coin (..),
+                                  CoinPortion (..), IsBootstrapEraAddr (..),
+                                  IsBootstrapEraAddr (..), Script (..), ScriptVersion,
+                                  ScriptVersion, SharedSeed (..), SlotLeaders, StakeholderId,
+                                  StakesList, StakesMap, TxFeePolicy (..), TxSizeLinear (..),
+                                  coinPortionDenominator, makeAddress, makePubKeyAddress,
+                                  mkMultiKeyDistr)
+import           Pos.Core.Configuration (CoreConfiguration (..), GenesisConfiguration (..),
                                          GenesisHash (..))
-import           Pos.Core.Delegation (HeavyDlgIndex (..), LightDlgIndices (..),
-                                      ProxySKHeavy, DlgPayload (..),
-                                      ProxySKBlockInfo)
-import           Pos.Core.Genesis (FakeAvvmOptions (..),
-                                   GenesisAvvmBalances (..),
-                                   GenesisDelegation (..),
-                                   GenesisInitializer (..),
-                                   GenesisProtocolConstants (..),
-                                   GenesisSpec (..), mkGenesisSpec,
-                                   TestnetBalanceOptions (..))
-import           Pos.Core.ProtocolConstants (ProtocolConstants (..),
-                                             VssMinTTL (..), VssMaxTTL (..))
-import           Pos.Core.Slotting (EpochIndex (..), EpochOrSlot (..),
-                                    FlatSlotId, LocalSlotIndex (..),
-                                    SlotCount (..), SlotId (..), TimeDiff (..),
-                                    Timestamp (..), localSlotIndexMaxBound,
-                                    localSlotIndexMinBound)
-import           Pos.Core.Ssc (Commitment, CommitmentSignature, CommitmentsMap,
-                               mkCommitmentsMap, mkSscProof, mkVssCertificate,
-                               mkVssCertificatesMap, Opening, OpeningsMap,
-                               InnerSharesMap, SharesDistribution, SharesMap,
-                               SignedCommitment, SscPayload (..), SscProof,
-                               VssCertificate (..), VssCertificatesHash,
-                               VssCertificatesMap (..),
+import           Pos.Core.Delegation (DlgPayload (..), HeavyDlgIndex (..), LightDlgIndices (..),
+                                      ProxySKBlockInfo, ProxySKHeavy)
+import           Pos.Core.Genesis (FakeAvvmOptions (..), GenesisAvvmBalances (..),
+                                   GenesisDelegation (..), GenesisInitializer (..),
+                                   GenesisProtocolConstants (..), GenesisSpec (..),
+                                   TestnetBalanceOptions (..), mkGenesisSpec)
+import           Pos.Core.ProtocolConstants (ProtocolConstants (..), VssMaxTTL (..), VssMinTTL (..))
+import           Pos.Core.Slotting (EpochIndex (..), EpochOrSlot (..), FlatSlotId,
+                                    LocalSlotIndex (..), SlotCount (..), SlotId (..), TimeDiff (..),
+                                    Timestamp (..), localSlotIndexMaxBound, localSlotIndexMinBound)
+import           Pos.Core.Ssc (Commitment, CommitmentSignature, CommitmentsMap, InnerSharesMap,
+                               Opening, OpeningsMap, SharesDistribution, SharesMap,
+                               SignedCommitment, SscPayload (..), SscProof, VssCertificate (..),
+                               VssCertificatesHash, VssCertificatesMap (..), mkCommitmentsMap,
+                               mkSscProof, mkVssCertificate, mkVssCertificatesMap,
                                randCommitmentAndOpening)
-import           Pos.Core.Txp (Tx (..), TxAttributes, TxAux (..), TxId,
-                               TxIn (..), TxInWitness (..), TxOut (..),
-                               TxOutAux (..), TxPayload (..), TxProof (..),
-                               TxSig, TxSigData (..), TxWitness (..),
-                               mkTxPayload)
-import           Pos.Core.Update (ApplicationName (..), BlockVersion (..),
-                                  BlockVersionData (..),
+import           Pos.Core.Ssc (VssCertificate (..), mkVssCertificate)
+import           Pos.Core.Txp (Tx (..), TxAttributes, TxAux (..), TxId, TxIn (..), TxInWitness (..),
+                               TxOut (..), TxOutAux (..), TxPayload (..), TxProof (..), TxSig,
+                               TxSigData (..), TxWitness (..), mkTxPayload)
+import           Pos.Core.Update (ApplicationName (..), BlockVersion (..), BlockVersionData (..),
                                   BlockVersionModifier (..), SoftforkRule (..),
-                                  SoftwareVersion (..), SystemTag (..),
-                                  UpAttributes, UpdateData (..),
-                                  UpdatePayload (..), UpdateProof,
-                                  UpdateProposal (..), UpdateProposals,
-                                  UpdateProposalToSign  (..), UpdateVote (..),
-                                  UpId, VoteId, mkUpdateVote)
-import           Pos.Crypto (PassPhrase)
+                                  SoftwareVersion (..), SystemTag (..), UpAttributes, UpId,
+                                  UpdateData (..), UpdatePayload (..), UpdateProof,
+                                  UpdateProposal (..), UpdateProposalToSign (..), UpdateProposals,
+                                  UpdateVote (..), VoteId, mkUpdateVote)
+import           Pos.Crypto (HDAddressPayload (..), Hash, PassPhrase, ProtocolMagic (..),
+                             PublicKey (..), RedeemPublicKey, RedeemSignature, SecretKey (..),
+                             SignTag (..), deterministicVssKeyGen, hash, redeemDeterministicKeyGen,
+                             redeemSign, sign, toVssPublicKey)
 import           Pos.Crypto.Configuration (ProtocolMagic (..))
-import           Pos.Crypto.Hashing (AbstractHash (..), Hash (..),
-                                     HashAlgorithm, WithHash, abstractHash,
-                                     hash, withHash)
+import           Pos.Crypto.Hashing (AbstractHash (..), Hash (..), HashAlgorithm, WithHash,
+                                     abstractHash, hash, withHash)
 import           Pos.Crypto.HD (HDAddressPayload (..), HDPassphrase (..))
 import           Pos.Crypto.Random (deterministic)
-import           Pos.Crypto.SecretSharing (DecShare, EncShare, Secret,
-                                           SecretProof, VssKeyPair,
-                                           VssPublicKey, decryptShare,
-                                           deterministicVssKeyGen,
+import           Pos.Crypto.SecretSharing (DecShare, EncShare, Secret, SecretProof, VssKeyPair,
+                                           VssPublicKey, decryptShare, deterministicVssKeyGen,
                                            genSharedSecret, toVssPublicKey)
-import           Pos.Crypto.Signing (EncryptedSecretKey, ProxyCert,
-                                     ProxySecretKey, ProxySignature,
-                                     PublicKey (..), SafeSigner (..),
-                                     SecretKey (..), SignTag (..), Signature,
-                                     Signed, deterministicKeyGen, mkSigned,
-                                     noPassEncrypt, proxySign, pskDelegatePk,
-                                     safeCreateProxyCert, safeCreatePsk, sign,
-                                     signEncoded, toPublic, createPsk)
-import           Pos.Crypto.Signing.Redeem (RedeemPublicKey, RedeemSecretKey,
-                                            RedeemSignature,
-                                            redeemDeterministicKeyGen,
-                                            redeemSign)
+import           Pos.Crypto.Signing (EncryptedSecretKey, ProxyCert, ProxySecretKey, ProxySignature,
+                                     PublicKey (..), SafeSigner (..), SecretKey (..), SignTag (..),
+                                     Signature, Signed, createPsk, deterministicKeyGen, mkSigned,
+                                     noPassEncrypt, proxySign, pskDelegatePk, safeCreateProxyCert,
+                                     safeCreatePsk, sign, signEncoded, toPublic)
+import           Pos.Crypto.Signing.Redeem (RedeemPublicKey, RedeemSecretKey, RedeemSignature,
+                                            redeemDeterministicKeyGen, redeemSign)
 import           Pos.Data.Attributes (mkAttributes)
+import           Pos.Merkle (mkMerkleTree, mtRoot)
 
-import           Test.Pos.Binary.Helpers.GoldenRoundTrip (discoverGolden,
-                                                          discoverRoundTrip,
-                                                          eachOf,
-                                                          goldenTestBi,
-                                                          roundTripsBiBuildable,
+import           Serokell.Data.Memory.Units (Byte)
+
+import           Test.Pos.Binary.Helpers.GoldenRoundTrip (discoverGolden, discoverRoundTrip, eachOf,
+                                                          goldenTestBi, roundTripsBiBuildable,
                                                           roundTripsBiShow)
 import           Test.Pos.Core.Gen
 import           Test.Pos.Crypto.Bi (getBytes)
@@ -542,12 +522,20 @@ roundTripTimeDiffBi = eachOf 1000 genTimeDiff roundTripsBiBuildable
 -- ApplicationName
 --------------------------------------------------------------------------------
 
+golden_ApplicationName :: Property
+golden_ApplicationName = goldenTestBi aN "test/golden/ApplicationName"
+    where aN = ApplicationName "Golden"
+
 roundTripApplicationName :: Property
 roundTripApplicationName = eachOf 10 genApplicationName roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
 -- Attributes
 --------------------------------------------------------------------------------
+
+golden_Attributes :: Property
+golden_Attributes = goldenTestBi attrib "test/golden/Attributes"
+    where attrib = mkAttributes ()
 
 roundTripAttributes :: Property
 roundTripAttributes = eachOf 10 (genAttributes (pure ())) roundTripsBiShow
@@ -556,6 +544,11 @@ roundTripAttributes = eachOf 10 (genAttributes (pure ())) roundTripsBiShow
 -- BlockVersion
 --------------------------------------------------------------------------------
 
+golden_BlockVersion :: Property
+golden_BlockVersion = goldenTestBi bVer "test/golden/BlockVersion"
+    where bVer = BlockVersion 1 1 1
+
+
 roundTripBlockVersion :: Property
 roundTripBlockVersion = eachOf 10 genBlockVersion roundTripsBiBuildable
 
@@ -563,12 +556,20 @@ roundTripBlockVersion = eachOf 10 genBlockVersion roundTripsBiBuildable
 -- BlockVersionData
 --------------------------------------------------------------------------------
 
+golden_BlockVersionData :: Property
+golden_BlockVersionData = goldenTestBi bVerDat "test/golden/BlockVersionData"
+    where bVerDat = exampleBlockVersionData
+
 roundTripBlockVersionData :: Property
 roundTripBlockVersionData = eachOf 10 genBlockVersionData roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
--- BlockVersionData
+-- BlockVersionModifier
 --------------------------------------------------------------------------------
+
+golden_BlockVersionModifier :: Property
+golden_BlockVersionModifier = goldenTestBi bVerMod "test/golden/BlockVersionModifier"
+    where bVerMod = exampleBlockVersionModifier
 
 roundTripBlockVersionModifier :: Property
 roundTripBlockVersionModifier = eachOf 10 genBlockVersionModifier roundTripsBiBuildable
@@ -609,12 +610,22 @@ roundTripCommitmentSignature = eachOf 10 (genCommitmentSignature $ ProtocolMagic
 -- HashRaw
 --------------------------------------------------------------------------------
 
+golden_BlockHashRaw :: Property
+golden_BlockHashRaw = goldenTestBi hRaw "test/golden/HashRaw"
+    where hRaw = (abstractHash $ Raw ("9" ) :: Hash Raw)
+
 roundTripHashRaw :: Property
 roundTripHashRaw = eachOf 10 genHashRaw roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
 -- InnerSharesMap
 --------------------------------------------------------------------------------
+
+-- come back later, decshare lives in `crypto`
+
+--golden_InnerSharesMap :: Property
+--golden_InnerSharesMap = goldenTestBi iSm "test/golden/InnerSharesMap"
+   -- where iSm = HM.fromList [(9,)]
 
 roundTripInnerSharesMap :: Property
 roundTripInnerSharesMap = eachOf 10 genInnerSharesMap roundTripsBiShow
@@ -623,12 +634,21 @@ roundTripInnerSharesMap = eachOf 10 genInnerSharesMap roundTripsBiShow
 -- MerkleTree
 --------------------------------------------------------------------------------
 
+golden_MerkleTree :: Property
+golden_MerkleTree = goldenTestBi mTree "test/golden/MerkleTree"
+    where mTree = mkMerkleTree [(abstractHash $ Raw ("9") :: Hash Raw)]
+
+
 roundTripMerkleTree :: Property
 roundTripMerkleTree = eachOf 10 (genMerkleTree genHashRaw) roundTripsBiShow
 
 --------------------------------------------------------------------------------
 -- MerkleRoot
 --------------------------------------------------------------------------------
+
+golden_MerkleRoot :: Property
+golden_MerkleRoot = goldenTestBi mTree "test/golden/MerkleRoot"
+    where mTree = mtRoot $ mkMerkleTree [(abstractHash $ Raw ("9") :: Hash Raw)]
 
 roundTripMerkleRoot :: Property
 roundTripMerkleRoot = eachOf 10 (genMerkleRoot genHashRaw) roundTripsBiBuildable
@@ -687,12 +707,20 @@ roundTripSharesMap = eachOf 10 genSharesMap roundTripsBiShow
 -- SoftforkRule
 --------------------------------------------------------------------------------
 
+golden_SoftforkRule :: Property
+golden_SoftforkRule = goldenTestBi sfR "test/golden/SoftforkRule"
+    where sfR = SoftforkRule (CoinPortion 99) (CoinPortion 99) (CoinPortion 99)
+
 roundTripSoftforkRule :: Property
 roundTripSoftforkRule = eachOf 10 genSoftforkRule roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
 -- SoftwareVersion
 --------------------------------------------------------------------------------
+
+golden_SoftwareVersion :: Property
+golden_SoftwareVersion = goldenTestBi swV "test/golden/SoftwareVersion"
+    where swV = SoftwareVersion (ApplicationName "Golden") 99
 
 roundTripSoftwareVersion :: Property
 roundTripSoftwareVersion = eachOf 10 genSoftwareVersion roundTripsBiBuildable
@@ -701,6 +729,10 @@ roundTripSoftwareVersion = eachOf 10 genSoftwareVersion roundTripsBiBuildable
 --------------------------------------------------------------------------------
 -- SscPayload
 --------------------------------------------------------------------------------
+-- TODO: Need VssCertificatesMap, luke is doing this
+--golden_SscPayload_Cert :: Property
+--golden_SscPayload_Cert = goldenTestBi sscP_cert "test/golden/SscPayload_Cert"
+--    where sscP_cert = CertificatesPayload
 
 roundTripSscPayload :: Property
 roundTripSscPayload = eachOf 10 (feedPM genSscPayload) roundTripsBiBuildable
@@ -715,6 +747,10 @@ roundTripSscProof = eachOf 10 (genSscProof $ ProtocolMagic 0) roundTripsBiBuilda
 --------------------------------------------------------------------------------
 -- SystemTag
 --------------------------------------------------------------------------------
+
+golden_SystemTag :: Property
+golden_SystemTag = goldenTestBi sysT "test/golden/SystemTag"
+    where sysT = SystemTag "golden"
 
 roundTripSystemTag :: Property
 roundTripSystemTag = eachOf 10 genSystemTag roundTripsBiBuildable
@@ -735,12 +771,23 @@ roundTripTimestamp = eachOf 10 genTimestamp roundTripsBiBuildable
 -- Tx
 --------------------------------------------------------------------------------
 
+golden_Tx :: Property
+golden_Tx = goldenTestBi tx "test/golden/Tx"
+    where
+        tx = UnsafeTx txInList txOutList (mkAttributes ())
+
 roundTripTx :: Property
 roundTripTx = eachOf 10 genTx roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
 -- TxAttributes
 --------------------------------------------------------------------------------
+
+golden_TxAttributes :: Property
+golden_TxAttributes = goldenTestBi txA "test/golden/TxAttributes"
+    where
+        txA = mkAttributes ()
+
 
 roundTripTxAttributes :: Property
 roundTripTxAttributes = eachOf 10 genTxAttributes roundTripsBiBuildable
@@ -758,7 +805,7 @@ roundTripTxAux = eachOf 1000 (feedPM genTxAux) roundTripsBiBuildable
 --------------------------------------------------------------------------------
 
 golden_HashTx :: Property
-golden_HashTx = goldenTestBi hashTx "test/golden/PkWitness"
+golden_HashTx = goldenTestBi hashTx "test/golden/HashTx"
 
 roundTripHashTx :: Property
 roundTripHashTx = eachOf 10 genTxHash roundTripsBiBuildable
@@ -769,10 +816,10 @@ roundTripHashTx = eachOf 10 genTxHash roundTripsBiBuildable
 
 
 golden_TxInUtxo :: Property
-golden_TxInUtxo = goldenTestBi txInUtxo "test/golden/TxInUtxo"
+golden_TxInUtxo = goldenTestBi txInUtxo "test/golden/TxIn_Utxo"
 
 golden_TxInUnknown :: Property
-golden_TxInUnknown = goldenTestBi txInUnknown "test/golden/TxInUnknown"
+golden_TxInUnknown = goldenTestBi txInUnknown "test/golden/TxIn_Unknown"
 
 roundTripTxIn :: Property
 roundTripTxIn = eachOf 10 genTxIn roundTripsBiBuildable
@@ -792,12 +839,8 @@ roundTripTxId = eachOf 10 genTxId roundTripsBiBuildable
 -- TxInList
 --------------------------------------------------------------------------------
 
-golden_TxInUtxoList :: Property
-golden_TxInUtxoList = goldenTestBi txInUtxoList "test/golden/TxInUtxoList"
-
-golden_TxInUnkownList :: Property
-golden_TxInUnkownList = goldenTestBi txInUnknownList "test/golden/TxInUnknownList"
-
+golden_TxInList :: Property
+golden_TxInList = goldenTestBi txInList "test/golden/TxInList"
 
 roundTripTxInList :: Property
 roundTripTxInList = eachOf 10 genTxInList roundTripsBiShow
@@ -807,13 +850,12 @@ roundTripTxInList = eachOf 10 genTxInList roundTripsBiShow
 --------------------------------------------------------------------------------
 
 golden_PkWitness :: Property
-golden_PkWitness = goldenTestBi pkWitness "test/golden/PkWitness"
+golden_PkWitness = goldenTestBi pkWitness "test/golden/TxInWitness_PkWitness"
      where
-        pkWitness = PkWitness pubKey txSig
-        Right pubKey = PublicKey <$> xpub (getBytes 0 64)
+        pkWitness = PkWitness examplePublicKey txSig
 
 golden_ScriptWitness :: Property
-golden_ScriptWitness = goldenTestBi scriptWitness "text/golden/ScriptWitness"
+golden_ScriptWitness = goldenTestBi scriptWitness "test/golden/TxInWitness_ScriptWitness"
     where
         scriptWitness = ScriptWitness validatorScript redeemerScript
         validatorScript = Script 47 "serialized script"
@@ -821,15 +863,12 @@ golden_ScriptWitness = goldenTestBi scriptWitness "text/golden/ScriptWitness"
 
 
 golden_RedeemWitness :: Property
-golden_RedeemWitness = goldenTestBi redeemWitness "test/golden/RedeemWitness"
+golden_RedeemWitness = goldenTestBi redeemWitness "test/golden/TxInWitness_RedeemWitness"
     where
-        redeemWitness = RedeemWitness redeemPublicKey redeemSig
-        Just redeemPublicKey = fst <$> redeemDeterministicKeyGen (getBytes 0 32)
-        redeemSig = redeemSign (ProtocolMagic 0) SignForTestingOnly rsk txSigData
-        Just rsk = snd <$> redeemDeterministicKeyGen (getBytes 0 32)
+        redeemWitness = RedeemWitness exampleRedeemPublicKey exampleRedeemSignature
 
 golden_UnknownWitnessType :: Property
-golden_UnknownWitnessType = goldenTestBi unkWitType "test/golden/UnknownWitnessType"
+golden_UnknownWitnessType = goldenTestBi unkWitType "test/golden/TxInWitness_UnknownWitnessType"
     where
         unkWitType = UnknownWitnessType 47 "forty seven"
 
@@ -882,6 +921,13 @@ roundTripTxPayload = eachOf 1000 (feedPM genTxPayload) roundTripsBiShow
 -- TxProof
 --------------------------------------------------------------------------------
 
+golden_TxProof :: Property
+golden_TxProof =  goldenTestBi txP "test/golden/TxProof"
+    where
+        txP = TxProof 32 mroot hashWit
+        mroot = mtRoot $ mkMerkleTree [(UnsafeTx txInList txOutList (mkAttributes ()))]
+        hashWit = hash $ [(V.fromList [(PkWitness examplePublicKey txSig)])]
+
 roundTripTxProof :: Property
 roundTripTxProof = eachOf 10 (genTxProof $ ProtocolMagic 0) roundTripsBiBuildable
 
@@ -912,12 +958,22 @@ roundTripTxSigData = eachOf 10 genTxSigData roundTripsBiShow
 -- TxWitness
 --------------------------------------------------------------------------------
 
+golden_TxWitness :: Property
+golden_TxWitness = goldenTestBi txWit "test/golden/TxWitness"
+    where
+        txWit = V.fromList [(PkWitness examplePublicKey txSig)]
+
 roundTripTxWitness :: Property
 roundTripTxWitness = eachOf 10 (genTxWitness $ ProtocolMagic 0) roundTripsBiShow
 
 --------------------------------------------------------------------------------
 -- UpAttributes
 --------------------------------------------------------------------------------
+
+golden_UpAttributes :: Property
+golden_UpAttributes = goldenTestBi upA "test/golden/UpAttributes"
+    where
+        upA = mkAttributes ()
 
 roundTripUpAttributes :: Property
 roundTripUpAttributes = eachOf 10 genUpAttributes roundTripsBiBuildable
@@ -988,6 +1044,11 @@ roundTripUpsData = eachOf 10 genUpsData roundTripsBiShow
 --------------------------------------------------------------------------------
 -- VoteId
 --------------------------------------------------------------------------------
+-- TODO:
+--golden_VoteId :: Property
+--golden_VoteId = goldenTestBi vID "test/golden/VoteId"
+--    where
+--        vID =
 
 roundTripVoteId :: Property
 roundTripVoteId = eachOf 10 (feedPM genVoteId) roundTripsBiBuildable
@@ -995,6 +1056,9 @@ roundTripVoteId = eachOf 10 (feedPM genVoteId) roundTripsBiBuildable
 --------------------------------------------------------------------------------
 -- VssCertificate
 --------------------------------------------------------------------------------
+
+golden_VssCertificate :: Property
+golden_VssCertificate = goldenTestBi exampleVssCertificate "test/golden/VssCertificate"
 
 roundTripVssCertificate :: Property
 roundTripVssCertificate = eachOf 10 (genVssCertificate $ ProtocolMagic 0) roundTripsBiBuildable
@@ -1039,7 +1103,7 @@ exampleCommitment = fst exampleCommitmentOpening
 exampleCommitmentOpening :: (Commitment, Opening)
 exampleCommitmentOpening =
   let numKeys   = 128 :: Int
-      parties   = 20 :: Integer
+      -- parties   = 20 :: Integer
       threshold = 15 :: Integer
       vssKeys   = replicate numKeys exampleVssPublicKey
   in  deterministic "commitmentOpening"
@@ -1094,7 +1158,7 @@ exampleVssPublicKey = toVssPublicKey mkVssKeyPair
     mkVssKeyPair = deterministicVssKeyGen $ (getBytes 0 32)
 
 hashTx :: Hash Tx
-hashTx = hash $ UnsafeTx txInUtxoList txOutList (mkAttributes ())
+hashTx = coerce (hash "golden" :: Hash Text)
 
 txId :: TxId
 txId = hashTx
@@ -1103,13 +1167,10 @@ txInUnknown :: TxIn
 txInUnknown = TxInUnknown 47 ("forty seven" :: ByteString)
 
 txInUtxo :: TxIn
-txInUtxo = TxInUtxo hashTx 47
+txInUtxo = TxInUtxo hashTx 47 -- TODO: loop here
 
-txInUtxoList :: (NonEmpty TxIn)
-txInUtxoList = fromList [txInUtxo]
-
-txInUnknownList :: (NonEmpty TxIn)
-txInUnknownList = fromList [txInUnknown]
+txInList :: (NonEmpty TxIn)
+txInList = fromList [txInUtxo]
 
 txOut :: TxOut
 txOut = TxOut (makePubKeyAddress (IsBootstrapEraAddr True) pkey) (Coin 47)
@@ -1127,6 +1188,51 @@ txSig = sign (ProtocolMagic 0) SignForTestingOnly skey txSigData
 txSigData :: TxSigData
 txSigData = TxSigData hashTx
 
+exampleBlockVersionData :: BlockVersionData
+exampleBlockVersionData = BlockVersionData
+                              (999 :: ScriptVersion)
+                              (999 :: Millisecond)
+                              (999 :: Byte)
+                              (999 :: Byte)
+                              (999 :: Byte)
+                              (999 :: Byte)
+                              (CoinPortion 99)
+                              (CoinPortion 99)
+                              (CoinPortion 99)
+                              (CoinPortion 99)
+                              (99 :: FlatSlotId)
+                              sfrule
+                              (TxFeePolicyTxSizeLinear tslin)
+                              (EpochIndex 99)
+    where
+        tslin = TxSizeLinear c1' c2'
+        c1' = Coeff (MkFixed 999)
+        c2' = Coeff (MkFixed 77)
+        sfrule = (SoftforkRule (CoinPortion 99) (CoinPortion 99) (CoinPortion 99))
+
+exampleBlockVersionModifier :: BlockVersionModifier
+exampleBlockVersionModifier = BlockVersionModifier
+                              (Just (999 :: ScriptVersion))
+                              (Just (999 :: Millisecond))
+                              (Just (999 :: Byte))
+                              (Just (999 :: Byte))
+                              (Just (999 :: Byte))
+                              (Just (999 :: Byte))
+                              (Just $ CoinPortion 99)
+                              (Just $ CoinPortion 99)
+                              (Just $ CoinPortion 99)
+                              (Just $ CoinPortion 99)
+                              (Just (99 :: FlatSlotId))
+                              (Just sfrule')
+                              (Just $ TxFeePolicyTxSizeLinear tslin')
+                              (Just $ EpochIndex 99)
+    where
+        tslin' = TxSizeLinear co1 co2
+        co1 = Coeff (MkFixed 999)
+        co2 = Coeff (MkFixed 77)
+        sfrule' = (SoftforkRule (CoinPortion 99) (CoinPortion 99) (CoinPortion 99))
+
+
 exampleSlotId :: SlotId
 exampleSlotId = SlotId (EpochIndex 11) (UnsafeLocalSlotIndex 47)
 
@@ -1136,6 +1242,20 @@ exampleAddrSpendingData_PubKey = PubKeyASD examplePublicKey
 examplePublicKey :: PublicKey
 examplePublicKey = pk
   where Right pk = PublicKey <$> xpub (getBytes 0 64)
+
+exampleRedeemPublicKey :: RedeemPublicKey
+exampleRedeemPublicKey = fromJust (fst <$> redeemDeterministicKeyGen (getBytes 0 32))
+
+exampleRedeemSignature :: RedeemSignature TxSigData
+exampleRedeemSignature = redeemSign (ProtocolMagic 0) SignForTestingOnly rsk txSigData
+    where
+        rsk = fromJust (snd <$> redeemDeterministicKeyGen (getBytes 0 32))
+
+exampleSecretKey :: SecretKey
+exampleSecretKey =
+    case (SecretKey <$> xprv (getBytes 10 128)) of
+        Left err   -> error $ toText ("Error generating secret key: " ++ err)
+        Right skey -> skey
 
 exampleScript :: Script
 exampleScript = Script 601 (getBytes 4 32)
@@ -1155,6 +1275,14 @@ exampleSlotLeaders = map abstractHash (pk1 :| [pk2, pk3])
     Right pk1 = PublicKey <$> xpub (getBytes  0 64)
     Right pk2 = PublicKey <$> xpub (getBytes 16 64)
     Right pk3 = PublicKey <$> xpub (getBytes 32 64)
+
+exampleVssCertificate :: VssCertificate
+exampleVssCertificate =
+    mkVssCertificate
+        (ProtocolMagic 0)
+        exampleSecretKey
+        (asBinary (toVssPublicKey $ deterministicVssKeyGen ("golden" :: ByteString)))
+        (EpochIndex 11)
 
 -----------------------------------------------------------------------
 -- Main test export
