@@ -41,6 +41,8 @@ module Cardano.Wallet.API.V1.Types (
   , AccountIndex
   , getAccIndex
   , mkAccountIndex
+  , AccountIndexError(..)
+  , renderAccountIndexError
   -- * Addresses
   , WalletAddress (..)
   , NewAddress (..)
@@ -87,6 +89,7 @@ import           Control.Lens (At, Index, IxValue, at, ix, makePrisms, to, (?~))
 import           Data.Aeson
 import           Data.Aeson.TH as A
 import           Data.Aeson.Types (toJSONKeyText, typeMismatch)
+import           Data.Bifunctor (first)
 import qualified Data.Char as C
 import           Data.Swagger as S
 import           Data.Swagger.Declare (Declare, look)
@@ -883,19 +886,38 @@ instance Bounded AccountIndex where
     minBound = AccountIndex 2147483648
     maxBound = AccountIndex maxBound
 
-mkAccountIndex :: Word32 -> Either Text AccountIndex
-mkAccountIndex index | index >= getAccIndex minBound = Right $ AccountIndex index
-                     | otherwise = Left $ sformat
-                            ("mkAccountIndex: Account index should be in range ["%int%".."%int%"]")
-                            (getAccIndex minBound)
-                            (getAccIndex maxBound)
+data AccountIndexError = AccountIndexError Word32
+    deriving (Eq, Show)
+
+instance Buildable AccountIndexError where
+    build (AccountIndexError i) =
+        bprint
+            ("Account index should be in range ["%int%".."%int%"], but "%int%" was provided.")
+            (getAccIndex minBound)
+            (getAccIndex maxBound)
+            i
+
+mkAccountIndex :: Word32 -> Either AccountIndexError AccountIndex
+mkAccountIndex index
+    | index >= getAccIndex minBound = Right $ AccountIndex index
+    | otherwise = Left $ AccountIndexError index
+
+renderAccountIndexError :: AccountIndexError -> Text
+renderAccountIndexError (AccountIndexError i) =
+    sformat
+        ("Account index should be in range ["%int%".."%int%"], but "%int%" was provided.")
+        (getAccIndex minBound)
+        (getAccIndex maxBound)
+        i
 
 instance ToJSON AccountIndex where
     toJSON = toJSON . getAccIndex
 
 instance FromJSON AccountIndex where
     parseJSON =
-        either (fail . toString) pure . mkAccountIndex <=< parseJSON
+        either (fail . toString . sformat build) pure
+        . mkAccountIndex
+        <=< parseJSON
 
 instance Arbitrary AccountIndex where
     arbitrary = AccountIndex <$> choose (getAccIndex minBound, getAccIndex maxBound)
@@ -915,7 +937,7 @@ instance ToSchema AccountIndex where
     declareNamedSchema = pure . paramSchemaToNamedSchema defaultSchemaOptions
 
 instance FromHttpApiData AccountIndex where
-    parseQueryParam = mkAccountIndex <=< parseQueryParam
+    parseQueryParam = first (sformat build) . mkAccountIndex <=< parseQueryParam
 
 instance ToHttpApiData AccountIndex where
     toQueryParam = fromString . show . getAccIndex
