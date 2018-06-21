@@ -1,14 +1,15 @@
 {-# OPTIONS_GHC -Wno-unused-imports   #-}
 {-# OPTIONS_GHC -Wno-dodgy-imports   #-}
 module Test.Pos.Core.Bi
-    ( tests
+       ( tests
     -- , roundTripAddressBi
-    , exampleSharesDistribution
-    ) where
+       ) where
 
 import           Universum
 
 import           Cardano.Crypto.Wallet (xprv, xpub)
+import           Crypto.Random (MonadRandom)
+import qualified Crypto.SCRAPE as Scrape
 import           Data.Coerce (coerce)
 import           Data.Fixed (Fixed (..))
 import qualified Data.HashMap.Strict as HM
@@ -37,7 +38,7 @@ import           Pos.Core.Common (AddrAttributes (..), AddrSpendingData (..),
                                   IsBootstrapEraAddr (..), Script (..), ScriptVersion,
                                   ScriptVersion, SharedSeed (..), SlotLeaders, StakeholderId,
                                   StakesList, StakesMap, TxFeePolicy (..), TxSizeLinear (..),
-                                  coinPortionDenominator, makeAddress, makePubKeyAddress,
+                                  addressHash, coinPortionDenominator, makeAddress, makePubKeyAddress,
                                   mkMultiKeyDistr)
 import           Pos.Core.Configuration (CoreConfiguration (..), GenesisConfiguration (..),
                                          GenesisHash (..))
@@ -54,10 +55,9 @@ import           Pos.Core.Slotting (EpochIndex (..), EpochOrSlot (..), FlatSlotI
 import           Pos.Core.Ssc (Commitment, CommitmentSignature, CommitmentsMap, InnerSharesMap,
                                Opening, OpeningsMap, SharesDistribution, SharesMap,
                                SignedCommitment, SscPayload (..), SscProof, VssCertificate (..),
-                               VssCertificatesHash, VssCertificatesMap (..), mkCommitmentsMap,
-                               mkSscProof, mkVssCertificate, mkVssCertificatesMap,
+                               VssCertificatesHash, VssCertificate (..), VssCertificatesMap (..),
+                               mkCommitmentsMap, mkSscProof, mkVssCertificate, mkVssCertificatesMap,
                                randCommitmentAndOpening)
-import           Pos.Core.Ssc (VssCertificate (..), mkVssCertificate)
 import           Pos.Core.Txp (Tx (..), TxAttributes, TxAux (..), TxId, TxIn (..), TxInWitness (..),
                                TxOut (..), TxOutAux (..), TxPayload (..), TxProof (..), TxSig,
                                TxSigData (..), TxWitness (..), mkTxPayload)
@@ -69,14 +69,14 @@ import           Pos.Core.Update (ApplicationName (..), BlockVersion (..), Block
                                   UpdateVote (..), VoteId, mkUpdateVote)
 import           Pos.Crypto (HDAddressPayload (..), Hash, PassPhrase, ProtocolMagic (..),
                              PublicKey (..), RedeemPublicKey, RedeemSignature, SecretKey (..),
-                             SignTag (..), deterministicVssKeyGen, hash, redeemDeterministicKeyGen,
-                             redeemSign, sign, toVssPublicKey)
+                             SecretProof (..), SignTag (..), deterministicVssKeyGen, hash,
+                             redeemDeterministicKeyGen, redeemSign, sign, toVssPublicKey)
 import           Pos.Crypto.Hashing (AbstractHash (..), Hash (..), HashAlgorithm, WithHash,
                                      abstractHash, hash, withHash)
 import           Pos.Crypto.HD (HDAddressPayload (..), HDPassphrase (..))
 import           Pos.Crypto.Random (deterministic)
-import           Pos.Crypto.SecretSharing (DecShare, EncShare, Secret, SecretProof, VssKeyPair,
-                                           VssPublicKey, decryptShare, deterministicVssKeyGen,
+import           Pos.Crypto.SecretSharing (DecShare, EncShare (..), Secret (..), SecretProof, VssKeyPair,
+                                           VssPublicKey (..), decryptShare, deterministicVssKeyGen,
                                            genSharedSecret, toVssPublicKey)
 import           Pos.Crypto.Signing (EncryptedSecretKey, ProxyCert, ProxySecretKey, ProxySignature,
                                      PublicKey (..), SafeSigner (..), SecretKey (..), SignTag (..),
@@ -706,11 +706,9 @@ roundTripHashRaw = eachOf 10 genHashRaw roundTripsBiBuildable
 -- InnerSharesMap
 --------------------------------------------------------------------------------
 
--- come back later, decshare lives in `crypto`
-
---golden_InnerSharesMap :: Property
---golden_InnerSharesMap = goldenTestBi iSm "test/golden/InnerSharesMap"
-   -- where iSm = HM.fromList [(9,)]
+golden_InnerSharesMap :: Property
+golden_InnerSharesMap = goldenTestBi iSm "test/golden/InnerSharesMap"
+    where iSm = exampleInnerSharesMap 3 1
 
 roundTripInnerSharesMap :: Property
 roundTripInnerSharesMap = eachOf 10 genInnerSharesMap roundTripsBiShow
@@ -1147,12 +1145,18 @@ roundTripVssCertificate = eachOf 10 (genVssCertificate $ ProtocolMagic 0) roundT
 -- VssCertificatesHash
 --------------------------------------------------------------------------------
 
+golden_VssCertificatesHash :: Property
+golden_VssCertificatesHash = goldenTestBi (exampleVssCertificatesHash 10 4) "test/golden/VssCertificatesHash"
+
 roundTripVssCertificatesHash :: Property
 roundTripVssCertificatesHash = eachOf 10 (feedPM genVssCertificatesHash) roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
 -- VssCertificatesMap
 --------------------------------------------------------------------------------
+
+golden_VssCertificatesMap :: Property
+golden_VssCertificatesMap = goldenTestBi (exampleVssCertificatesMap 10 4) "test/golden/VssCertificatesMap"
 
 roundTripVssCertificatesMap :: Property
 roundTripVssCertificatesMap = eachOf 10 (genVssCertificatesMap $ ProtocolMagic 0) roundTripsBiShow
@@ -1230,10 +1234,23 @@ exampleSignedCommitment =
 exampleStakeholderId :: StakeholderId
 exampleStakeholderId = abstractHash examplePublicKey :: StakeholderId
 
+exampleStakeholderIds :: Int -> Int -> [StakeholderId]
+exampleStakeholderIds offset l = map abstractHash $ examplePublicKeys offset l
+
+exampleVssKeyPairs :: Int -> Int -> [VssKeyPair]
+exampleVssKeyPairs offset count = map (toPair . (*offset)) [0..count]
+    where
+        toPair start = deterministicVssKeyGen (getBytes start 32)
+
 exampleVssPublicKey :: VssPublicKey
 exampleVssPublicKey = toVssPublicKey mkVssKeyPair
   where
     mkVssKeyPair = deterministicVssKeyGen $ (getBytes 0 32)
+
+exampleVssPublicKeys :: Int -> Int -> [VssPublicKey]
+exampleVssPublicKeys offset count = map (toKey . (*offset)) [0..count]
+    where
+        toKey start = toVssPublicKey . deterministicVssKeyGen $ (getBytes start 32)
 
 hashTx :: Hash Tx
 hashTx = coerce (hash "golden" :: Hash Text)
@@ -1308,7 +1325,6 @@ exampleBlockVersionModifier = BlockVersionModifier
         co2 = Coeff (MkFixed 77)
         sfrule' = (SoftforkRule (CoinPortion 99) (CoinPortion 99) (CoinPortion 99))
 
-
 exampleSlotId :: SlotId
 exampleSlotId = SlotId (EpochIndex 11) (UnsafeLocalSlotIndex 47)
 
@@ -1344,6 +1360,45 @@ exampleSecretKeys offset count = map (toKey . (*offset)) [0..count-1]
     toKey start = let Right sk = SecretKey <$> xprv (getBytes start 128)
                    in sk
 
+-- Lifted from genSharedSecret in `Pos.Crypto.SecretSharing`.
+-- added `deterministic` in third guard.
+
+exampleSharedSecret
+    :: Scrape.Threshold -> NonEmpty VssPublicKey -> (Secret, SecretProof, [(VssPublicKey, EncShare)])
+exampleSharedSecret t ps
+    | t <= 1     = error "genSharedSecret: threshold must be > 1"
+    | t >= n - 1 = error "genSharedSecret: threshold must be > n-1"
+    | otherwise  = convertRes . deterministic "ss" $ Scrape.escrow t (coerce sorted)
+  where
+    n = fromIntegral (length ps)
+    sorted = sort (toList ps)
+    convertRes (gen, secret, shares, comms, proof, pproofs) =
+        (coerce secret,
+         SecretProof gen proof pproofs comms,
+         zip sorted (coerce shares))
+
+-- Not sure why you don't use `VssPublicKey` for the `InnerSharesMap`
+-- as you use `VssPublicKey`s to generate `DecShare`s.
+
+exampleInnerSharesMap :: Scrape.Threshold -> Int -> InnerSharesMap
+exampleInnerSharesMap count offset =
+    HM.fromList $ zipWith
+                      (\x y -> ((addressHash x), fromList [asBinary y]))
+                          (pubKeys)
+                          (decShares)
+        where
+          -- generate VssPublicKey and VssSecretKey pairs.
+          vssKeyPairs = exampleVssKeyPairs offset $ fromIntegral (count+1)
+          -- generate SharedSecrets from the VssPublicKeys generated above.
+          ss = exampleSharedSecret (count) (fromList $ map toVssPublicKey vssKeyPairs)
+          -- filter `VssPublicKeys`s and their corresponding `EncShare`s.
+          encShares (_, _, pKeSlist) = map snd pKeSlist
+          -- generate `PublicKey`s
+          pubKeys = examplePublicKeys 1 $ fromIntegral (count+1)
+          -- generate `DecShares`
+          decShares =
+            [deterministic "ss" $ decryptShare pr es | pr <- vssKeyPairs, es <- encShares ss]
+
 exampleScript :: Script
 exampleScript = Script 601 (getBytes 4 32)
 
@@ -1363,6 +1418,25 @@ exampleVssCertificate =
         exampleSecretKey
         (asBinary (toVssPublicKey $ deterministicVssKeyGen ("golden" :: ByteString)))
         (EpochIndex 11)
+
+exampleVssCertificates :: Int -> Int -> [VssCertificate]
+exampleVssCertificates offset num =  map vssCert [0..num-1]
+    where
+        secretKeyList = (exampleSecretKeys offset num)
+        vssCert index = mkVssCertificate
+                           (ProtocolMagic 0)
+                           (secretKeyList !! index)
+                           (asBinary (toVssPublicKey $ deterministicVssKeyGen (getBytes index 128)))
+                           (EpochIndex 122)
+
+exampleVssCertificatesMap :: Int -> Int -> VssCertificatesMap
+exampleVssCertificatesMap offset num = mkVssCertificatesMap $ exampleVssCertificates offset num
+
+
+exampleVssCertificatesHash :: Int -> Int -> VssCertificatesHash
+exampleVssCertificatesHash offset len =
+    hash . getVssCertificatesMap $ exampleVssCertificatesMap offset len
+
 
 staticProxySKHeavys :: [ProxySKHeavy]
 staticProxySKHeavys = zipWith4 safeCreatePsk
