@@ -1183,11 +1183,11 @@ roundTripUpsData = eachOf 10 genUpsData roundTripsBiShow
 -- VoteId
 --------------------------------------------------------------------------------
 
---golden_VoteId :: Property
---golden_VoteId = goldenTestBi vID "test/golden/VoteId"
---    where
---        vID =
-
+golden_VoteId :: Property
+golden_VoteId = goldenTestBi vID "test/golden/VoteId"
+    where
+        vID = (exampleUpId, examplePublicKey, False)
+-- ```type VoteId = (UpId, PublicKey, Bool)```
 roundTripVoteId :: Property
 roundTripVoteId = eachOf 10 (feedPM genVoteId) roundTripsBiBuildable
 
@@ -1254,7 +1254,7 @@ whichConstructor a = Text.unpack $ head $ fromList $ words $ show a
 -- of a sum type.
 mkGoldenTestGroup :: (Bi a, Eq a, Show a) => String -> [a] -> Property
 mkGoldenTestGroup gn xs =
-    H.withTests 1 . H.property $ void $ H.checkSequential group
+    H.withTests 1 . H.property $ void $ H.checkSequential group'
   where
     mkGoldenTest :: (Bi a, Eq a, Show a) => a -> Property
     mkGoldenTest x = goldenTestBi x goldenPath
@@ -1267,8 +1267,8 @@ mkGoldenTestGroup gn xs =
             ] :: String
     toNamedProperty :: (Bi a, Eq a, Show a) => a -> (PropertyName, Property)
     toNamedProperty x = (fromString (whichConstructor x), mkGoldenTest x)
-    group :: Group
-    group = Group (fromString gn :: GroupName) (map toNamedProperty xs)
+    group' :: Group
+    group' = Group (fromString gn :: GroupName) (map toNamedProperty xs)
 
 -- Don't forget to try and use this throughout the codebase!!
 exampleAttributes :: Attributes ()
