@@ -36,6 +36,7 @@ library
                      , hedgehog
                      , pvss
                      , serokell-util
+                     , text
                      , time-units
                      , universum
                      , unordered-containers

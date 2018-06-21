@@ -1,8 +1,11 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 {-# OPTIONS_GHC -Wno-unused-imports   #-}
 {-# OPTIONS_GHC -Wno-dodgy-imports   #-}
+
 module Test.Pos.Core.Bi
        ( tests
-    -- , roundTripAddressBi
+       -- , roundTripAddressBi
        ) where
 
 import           Universum
@@ -17,12 +20,13 @@ import           Data.List (zipWith4, (!!))
 import           Data.List.NonEmpty (fromList)
 import qualified Data.Map as M
 import           Data.Maybe (fromJust)
+import qualified Data.Text as Text (unpack)
 import           Data.Time.Units (Millisecond, fromMicroseconds)
 import qualified Data.Vector as V
-import           Hedgehog (Property)
+import           Hedgehog (Group (..), GroupName, Property, PropertyName)
 import qualified Hedgehog as H
 
-import           Pos.Binary.Class (Raw (..), asBinary)
+import           Pos.Binary.Class (Bi, Raw (..), asBinary)
 import           Pos.Core.Block (BlockBodyAttributes, BlockHeader (..), BlockHeaderAttributes,
                                  BlockSignature (..), GenesisBlockHeader, GenesisBody (..),
                                  GenesisBody (..), GenesisConsensusData (..),
@@ -931,30 +935,16 @@ roundTripTxInList = eachOf 10 genTxInList roundTripsBiShow
 -- TxInWitness
 --------------------------------------------------------------------------------
 
-golden_PkWitness :: Property
-golden_PkWitness = goldenTestBi pkWitness "test/golden/TxInWitness_PkWitness"
-     where
-        pkWitness = PkWitness examplePublicKey txSig
-
-golden_ScriptWitness :: Property
-golden_ScriptWitness = goldenTestBi scriptWitness "test/golden/TxInWitness_ScriptWitness"
-    where
-        scriptWitness = ScriptWitness validatorScript redeemerScript
-        validatorScript = Script 47 "serialized script"
-        redeemerScript = Script 47 "serialized script"
-
-
-golden_RedeemWitness :: Property
-golden_RedeemWitness = goldenTestBi redeemWitness "test/golden/TxInWitness_RedeemWitness"
-    where
-        redeemWitness = RedeemWitness exampleRedeemPublicKey exampleRedeemSignature
-
-golden_UnknownWitnessType :: Property
-golden_UnknownWitnessType = goldenTestBi unkWitType "test/golden/TxInWitness_UnknownWitnessType"
-    where
-        unkWitType = UnknownWitnessType 47 "forty seven"
-
--- 4000 because this should generate 1000 for each constructor
+golden_TxInWitness :: Property
+golden_TxInWitness = mkGoldenTestGroup "TxInWitness" witnesses
+  where
+    validatorScript = Script 47 "serialized script"
+    redeemerScript = Script 47 "serialized script"
+    witnesses = [ PkWitness examplePublicKey txSig
+                , ScriptWitness validatorScript redeemerScript
+                , RedeemWitness exampleRedeemPublicKey exampleRedeemSignature
+                , UnknownWitnessType 47 "forty seven"
+                ]
 
 roundTripTxInWitness :: Property
 roundTripTxInWitness = eachOf 10 (genTxInWitness $ ProtocolMagic 0) roundTripsBiBuildable
@@ -1180,6 +1170,35 @@ feedPMC genA = do pm <- genProtocolMagic
 --------------------------------------------------------------------------------
 -- Helpers
 --------------------------------------------------------------------------------
+
+-- | Given an input value, return the name of its constructor.
+-- This returns the first word of the 'show' output of the input type. If the
+-- 'Show' instance is derived, this will be the constructor's name. However, a
+-- custom 'Show' instance would break this.
+whichConstructor :: Show a => a -> String
+whichConstructor a = Text.unpack $ head $ fromList $ words $ show a
+
+-- | Given the 'Group' name and a list of values of a sum type, construct a
+-- 'Property' which represents a 'Group' of golden tests.
+-- This is useful for grouping together the golden tests for each constructor
+-- of a sum type.
+mkGoldenTestGroup :: (Bi a, Eq a, Show a) => String -> [a] -> Property
+mkGoldenTestGroup gn xs =
+    H.withTests 1 . H.property $ void $ H.checkSequential group
+  where
+    mkGoldenTest :: (Bi a, Eq a, Show a) => a -> Property
+    mkGoldenTest x = goldenTestBi x goldenPath
+      where
+        goldenPath = mconcat
+            [ "test/golden/"
+            , gn
+            , "_"
+            , whichConstructor x
+            ] :: String
+    toNamedProperty :: (Bi a, Eq a, Show a) => a -> (PropertyName, Property)
+    toNamedProperty x = (fromString (whichConstructor x), mkGoldenTest x)
+    group :: Group
+    group = Group (fromString gn :: GroupName) (map toNamedProperty xs)
 
 exampleCommitment :: Commitment
 exampleCommitment = fst exampleCommitmentOpening
