@@ -58,7 +58,7 @@ import           Pos.Core.Slotting (EpochIndex (..), EpochOrSlot (..), FlatSlotI
                                     Timestamp (..), localSlotIndexMaxBound, localSlotIndexMinBound)
 import           Pos.Core.Ssc (Commitment, CommitmentSignature, CommitmentsMap, InnerSharesMap,
                                Opening, OpeningsMap, SharesDistribution, SharesMap,
-                               SignedCommitment, SscPayload (..), SscProof, VssCertificate (..),
+                               SignedCommitment, SscPayload (..), SscProof (..), VssCertificate (..),
                                VssCertificatesHash, VssCertificate (..), VssCertificatesMap (..),
                                mkCommitmentsMap, mkSscProof, mkVssCertificate, mkVssCertificatesMap,
                                randCommitmentAndOpening)
@@ -787,6 +787,11 @@ roundTripSharesDistribution = eachOf 10 genSharesDistribution roundTripsBiShow
 -- SharesMap
 --------------------------------------------------------------------------------
 
+golden_SharesMap :: Property
+golden_SharesMap = goldenTestBi sM "test/golden/SharesMap"
+    where
+        sM = HM.fromList $ [(exampleStakeholderId, exampleInnerSharesMap 3 1)]
+
 roundTripSharesMap :: Property
 roundTripSharesMap = eachOf 10 genSharesMap roundTripsBiShow
 
@@ -815,10 +820,33 @@ roundTripSoftwareVersion = eachOf 10 genSoftwareVersion roundTripsBiBuildable
 --------------------------------------------------------------------------------
 -- SscPayload
 --------------------------------------------------------------------------------
--- TODO: Need VssCertificatesMap, luke is doing this
---golden_SscPayload_Cert :: Property
---golden_SscPayload_Cert = goldenTestBi sscP_cert "test/golden/SscPayload_Cert"
---    where sscP_cert = CertificatesPayload
+
+golden_SscPayload_CommitmentsPayload :: Property
+golden_SscPayload_CommitmentsPayload =
+    goldenTestBi cP "test/golden/SscPayload_CommitmentsPayload"
+  where
+    cP = CommitmentsPayload exampleCommitmentsMap (exampleVssCertificatesMap 10 4)
+
+golden_SscPayload_OpeningsPayload :: Property
+golden_SscPayload_OpeningsPayload =
+    goldenTestBi oP "test/golden/SscPayload_OpeningsPayload"
+  where
+    oP = OpeningsPayload exampleOpeningsMap (exampleVssCertificatesMap 10 4)
+
+
+golden_SscPayload_SharesPayload :: Property
+golden_SscPayload_SharesPayload =
+    goldenTestBi sP "test/golden/SscPayload_SharesPayload"
+  where
+    sP = SharesPayload exampleSharesMap (exampleVssCertificatesMap 10 4)
+    exampleSharesMap = HM.fromList $ [(exampleStakeholderId, exampleInnerSharesMap 3 1)]
+
+golden_SscPayload_CertificatesPayload :: Property
+golden_SscPayload_CertificatesPayload =
+    goldenTestBi shP "test/golden/SscPayload_CertificatesPayload"
+  where
+    shP = CertificatesPayload (exampleVssCertificatesMap 10 4)
+
 
 roundTripSscPayload :: Property
 roundTripSscPayload = eachOf 10 (feedPM genSscPayload) roundTripsBiBuildable
@@ -826,6 +854,32 @@ roundTripSscPayload = eachOf 10 (feedPM genSscPayload) roundTripsBiBuildable
 --------------------------------------------------------------------------------
 -- SscProof
 --------------------------------------------------------------------------------
+
+golden_SscProof_CommitmentsProof :: Property
+golden_SscProof_CommitmentsProof =
+    goldenTestBi cP "test/golden/SscProof_CommitmentsProof"
+  where
+    cP = CommitmentsProof (hash exampleCommitmentsMap) (exampleVssCertificatesHash 10 4)
+
+golden_SscProof_OpeningsProo :: Property
+golden_SscProof_OpeningsProo =
+    goldenTestBi oP "test/golden/SscProof_OpeningsProof"
+  where
+    oP = OpeningsProof (hash exampleOpeningsMap) (exampleVssCertificatesHash 10 4)
+
+
+golden_SscProof_SharesProof :: Property
+golden_SscProof_SharesProof =
+    goldenTestBi sP "test/golden/SscProof_SharesProof"
+  where
+    sP = SharesProof (hash exampleSharesMap) (exampleVssCertificatesHash 10 4)
+    exampleSharesMap = HM.fromList $ [(exampleStakeholderId, exampleInnerSharesMap 3 1)]
+
+golden_SscProof_CertificatesProof :: Property
+golden_SscProof_CertificatesProof =
+    goldenTestBi shP "test/golden/SscProof_CertificatesProof"
+  where
+    shP = CertificatesProof (exampleVssCertificatesHash 10 4)
 
 roundTripSscProof :: Property
 roundTripSscProof = eachOf 10 (genSscProof $ ProtocolMagic 0) roundTripsBiBuildable
@@ -1103,7 +1157,7 @@ roundTripUpId :: Property
 roundTripUpId = eachOf 10 (feedPM genUpId) roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
--- UpsData
+-- UpsData NB: UpsData is not a type it is a record accessor of `UpdateProposalToSign`
 --------------------------------------------------------------------------------
 
 roundTripUpsData :: Property
@@ -1112,7 +1166,7 @@ roundTripUpsData = eachOf 10 genUpsData roundTripsBiShow
 --------------------------------------------------------------------------------
 -- VoteId
 --------------------------------------------------------------------------------
--- TODO:
+
 --golden_VoteId :: Property
 --golden_VoteId = goldenTestBi vID "test/golden/VoteId"
 --    where
