@@ -12,6 +12,7 @@ import           Cardano.Crypto.Wallet (xprv, xpub)
 import           Data.Coerce (coerce)
 import           Data.Fixed (Fixed (..))
 import qualified Data.HashMap.Strict as HM
+import           Data.List ((!!), zipWith4)
 import           Data.List.NonEmpty (fromList)
 import qualified Data.Map as M
 import           Data.Maybe (fromJust)
@@ -70,7 +71,6 @@ import           Pos.Crypto (HDAddressPayload (..), Hash, PassPhrase, ProtocolMa
                              PublicKey (..), RedeemPublicKey, RedeemSignature, SecretKey (..),
                              SignTag (..), deterministicVssKeyGen, hash, redeemDeterministicKeyGen,
                              redeemSign, sign, toVssPublicKey)
-import           Pos.Crypto.Configuration (ProtocolMagic (..))
 import           Pos.Crypto.Hashing (AbstractHash (..), Hash (..), HashAlgorithm, WithHash,
                                      abstractHash, hash, withHash)
 import           Pos.Crypto.HD (HDAddressPayload (..), HDPassphrase (..))
@@ -410,17 +410,46 @@ roundTripTxSizeLinearBi = eachOf 1000 genTxSizeLinear roundTripsBiBuildable
 -- roundTripCoreConfigurationBi :: Property
 -- roundTripCoreConfigurationBi = eachOf 1000 genCoreConfiguration roundTripsBiBuildable
 
+-- DlgPayload
+golden_DlgPayload :: Property
+golden_DlgPayload = goldenTestBi dp "test/golden/DlgPayload"
+  where dp = UnsafeDlgPayload (take 4 staticProxySKHeavys)
+
 roundTripDlgPayloadBi :: Property
 roundTripDlgPayloadBi = eachOf 100 (feedPM genDlgPayload) roundTripsBiBuildable
+
+-- HeavyDlgIndex
+golden_HeavyDlgIndex :: Property
+golden_HeavyDlgIndex = goldenTestBi hdi "test/golden/HeavyDlgIndex"
+  where hdi = staticHeavyDlgIndexes !! 0
 
 roundTripHeavyDlgIndexBi :: Property
 roundTripHeavyDlgIndexBi = eachOf 1000 genHeavyDlgIndex roundTripsBiBuildable
 
+-- LightDlgIndices
+golden_LightDlgIndices :: Property
+golden_LightDlgIndices = goldenTestBi ldi "test/golden/LightDlgIndices"
+  where ldi = LightDlgIndices (EpochIndex 7, EpochIndex 88)
+
 roundTripLightDlgIndicesBi :: Property
 roundTripLightDlgIndicesBi = eachOf 1000 genLightDlgIndices roundTripsBiBuildable
 
+-- ProxySKBlockInfo
+golden_ProxySKBlockInfo_Nothing :: Property
+golden_ProxySKBlockInfo_Nothing = goldenTestBi pskbi "test/golden/ProxySKBlockInfo_Nothing"
+  where pskbi = Nothing :: ProxySKBlockInfo
+
+golden_ProxySKBlockInfo_Just :: Property
+golden_ProxySKBlockInfo_Just = goldenTestBi pskbi "test/golden/ProxySKBlockInfo_Just"
+  where pskbi = Just (staticProxySKHeavys !! 0, examplePublicKey) :: ProxySKBlockInfo
+
 roundTripProxySKBlockInfoBi :: Property
 roundTripProxySKBlockInfoBi = eachOf 200 (feedPM genProxySKBlockInfo) roundTripsBiShow
+
+-- ProxySKHeavy
+golden_ProxySKHeavy :: Property
+golden_ProxySKHeavy = goldenTestBi skh "test/golden/ProxySKHeavy"
+  where skh = staticProxySKHeavys !! 0
 
 roundTripProxySKHeavyBi :: Property
 roundTripProxySKHeavyBi = eachOf 200 (feedPM genProxySKHeavy) roundTripsBiBuildable
@@ -938,8 +967,8 @@ roundTripTxProof = eachOf 10 (genTxProof $ ProtocolMagic 0) roundTripsBiBuildabl
 golden_TxSig :: Property
 golden_TxSig = goldenTestBi txSigGold "test/golden/TxSig"
     where
-        txSigGold = sign (ProtocolMagic 0) SignForTestingOnly skey txSigData
-        Right skey = SecretKey <$> xprv (getBytes 10 128)
+        txSigGold = sign (ProtocolMagic 0) SignForTestingOnly
+                         exampleSecretKey txSigData
 
 roundTripTxSig :: Property
 roundTripTxSig = eachOf 10 (genTxSig $ ProtocolMagic 0) roundTripsBiBuildable
@@ -1114,10 +1143,8 @@ exampleCommitmentSignature =
     sign
       (ProtocolMagic 0)
       SignForTestingOnly
-      skey
+      exampleSecretKey
       (exampleEpochIndex, exampleCommitment)
-  where
-    Right skey = SecretKey <$> xprv (getBytes 10 128)
 
 exampleCommitmentsMap :: CommitmentsMap
 exampleCommitmentsMap =
@@ -1181,9 +1208,7 @@ txOutList :: (NonEmpty TxOut)
 txOutList = fromList [txOut]
 
 txSig :: TxSig
-txSig = sign (ProtocolMagic 0) SignForTestingOnly skey txSigData
-    where
-        Right skey = SecretKey <$> xprv (getBytes 10 128)
+txSig = sign (ProtocolMagic 0) SignForTestingOnly exampleSecretKey txSigData
 
 txSigData :: TxSigData
 txSigData = TxSigData hashTx
@@ -1241,7 +1266,13 @@ exampleAddrSpendingData_PubKey = PubKeyASD examplePublicKey
 
 examplePublicKey :: PublicKey
 examplePublicKey = pk
-  where Right pk = PublicKey <$> xpub (getBytes 0 64)
+  where [pk] = examplePublicKeys 16 1 -- 16 could be any number, as we take the first key
+
+examplePublicKeys :: Int -> Int -> [PublicKey]
+examplePublicKeys offset count = map (toKey . (*offset)) [0..count-1]
+  where
+    toKey start = let Right pk = PublicKey <$> xpub (getBytes start 64)
+                   in pk
 
 exampleRedeemPublicKey :: RedeemPublicKey
 exampleRedeemPublicKey = fromJust (fst <$> redeemDeterministicKeyGen (getBytes 0 32))
@@ -1251,11 +1282,16 @@ exampleRedeemSignature = redeemSign (ProtocolMagic 0) SignForTestingOnly rsk txS
     where
         rsk = fromJust (snd <$> redeemDeterministicKeyGen (getBytes 0 32))
 
+-- In order to get the key starting at byte 10, we generate two with offsets of 10
+-- between them and take the second.
 exampleSecretKey :: SecretKey
-exampleSecretKey =
-    case (SecretKey <$> xprv (getBytes 10 128)) of
-        Left err   -> error $ toText ("Error generating secret key: " ++ err)
-        Right skey -> skey
+exampleSecretKey = (exampleSecretKeys 10 2) !! 1
+
+exampleSecretKeys :: Int -> Int -> [SecretKey]
+exampleSecretKeys offset count = map (toKey . (*offset)) [0..count-1]
+  where
+    toKey start = let Right sk = SecretKey <$> xprv (getBytes start 128)
+                   in sk
 
 exampleScript :: Script
 exampleScript = Script 601 (getBytes 4 32)
@@ -1263,18 +1299,11 @@ exampleScript = Script 601 (getBytes 4 32)
 exampleStakesList :: StakesList
 exampleStakesList = zip sis coins
   where
-    sis   = [si1, si2, si3]
+    sis   = map abstractHash (examplePublicKeys 15 3)
     coins = map Coin [79, 44, 9999999]
-    Right si1 = abstractHash . PublicKey <$> xpub (getBytes  0 64)
-    Right si2 = abstractHash . PublicKey <$> xpub (getBytes 15 64)
-    Right si3 = abstractHash . PublicKey <$> xpub (getBytes 30 64)
 
 exampleSlotLeaders :: SlotLeaders
-exampleSlotLeaders = map abstractHash (pk1 :| [pk2, pk3])
-  where
-    Right pk1 = PublicKey <$> xpub (getBytes  0 64)
-    Right pk2 = PublicKey <$> xpub (getBytes 16 64)
-    Right pk3 = PublicKey <$> xpub (getBytes 32 64)
+exampleSlotLeaders = map abstractHash (fromList (examplePublicKeys 16 3))
 
 exampleVssCertificate :: VssCertificate
 exampleVssCertificate =
@@ -1283,6 +1312,20 @@ exampleVssCertificate =
         exampleSecretKey
         (asBinary (toVssPublicKey $ deterministicVssKeyGen ("golden" :: ByteString)))
         (EpochIndex 11)
+
+staticProxySKHeavys :: [ProxySKHeavy]
+staticProxySKHeavys = zipWith4 safeCreatePsk
+                               staticProtocolMagics staticSafeSigners
+                               (examplePublicKeys 1 6) staticHeavyDlgIndexes
+
+staticHeavyDlgIndexes :: [HeavyDlgIndex]
+staticHeavyDlgIndexes = map (HeavyDlgIndex . EpochIndex) [5,1,3,27,99,247]
+
+staticSafeSigners :: [SafeSigner]
+staticSafeSigners = map FakeSigner (exampleSecretKeys 1 6)
+
+staticProtocolMagics :: [ProtocolMagic]
+staticProtocolMagics = map ProtocolMagic [0..5]
 
 -----------------------------------------------------------------------
 -- Main test export
