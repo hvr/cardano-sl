@@ -12,7 +12,7 @@ import           Cardano.Crypto.Wallet (xprv, xpub)
 import           Data.Coerce (coerce)
 import           Data.Fixed (Fixed (..))
 import qualified Data.HashMap.Strict as HM
-import           Data.List ((!!), zipWith4)
+import           Data.List (zipWith4, (!!))
 import           Data.List.NonEmpty (fromList)
 import qualified Data.Map as M
 import           Data.Maybe (fromJust)
@@ -111,17 +111,9 @@ roundTripBlockBodyAttributesBi :: Property
 roundTripBlockBodyAttributesBi = eachOf 1000 genBlockBodyAttributes roundTripsBiBuildable
 
 -- BlockHeader
-golden_BlockHeaderGenesis :: Property
-golden_BlockHeaderGenesis = goldenTestBi bhg "test/golden/BlockHeaderGenesis"
-  where
-    bhg = mkGenesisHeader (ProtocolMagic 0)
-                          (Left (GenesisHash prevHash))
-                          (EpochIndex 11)
-                          genesisBody
-    genesisBody = GenesisBody (sId1 :| [sId2])
-    prevHash = coerce (hash ("genesisHash" :: Text)) :: Hash a
-    sId1 = coerce (hash ("stakeholder 1" :: Text))
-    sId2 = coerce (hash ("stakeholder 2" :: Text))
+golden_BlockHeader_Genesis :: Property
+golden_BlockHeader_Genesis = goldenTestBi (BlockHeaderGenesis exampleGenesisBlockHeader)
+                                          "test/golden/BlockHeader_Genesis"
 
 -- golden_BlockHeaderMain :: Property
 -- golden_BlockHeaderMain = goldenTestBi bhm "test/golden/BlockHeaderMain"
@@ -131,7 +123,7 @@ golden_BlockHeaderGenesis = goldenTestBi bhg "test/golden/BlockHeaderGenesis"
 --                                sk pske
 --                                body extra
 --     prevHash = coerce (hash ("genesisHash" :: Text)) :: Hash a
---     sk = undefined
+--     sk = exampleSecretKey
 --     pske = undefined
 --     body = undefined
 --     extra = undefined
@@ -139,17 +131,52 @@ golden_BlockHeaderGenesis = goldenTestBi bhg "test/golden/BlockHeaderGenesis"
 roundTripBlockHeaderBi :: Property
 roundTripBlockHeaderBi = eachOf 10 (feedPMC genBlockHeader) roundTripsBiBuildable
 
+golden_BlockHeaderAttributes :: Property
+golden_BlockHeaderAttributes = goldenTestBi (mkAttributes () :: BlockHeaderAttributes)
+                                            "test/golden/BlockHeaderAttributes"
+
 roundTripBlockHeaderAttributesBi :: Property
 roundTripBlockHeaderAttributesBi = eachOf 1000 genBlockHeaderAttributes roundTripsBiBuildable
+
+-- -- BlockSignature
+-- golden_BlockSignature :: Property
+-- golden_BlockSignature = goldenTestBi exampleBlockSignature "test/golden/BlockSignature"
+-- TODO ^ sig has type `Signature MainToSign`
+
+-- golden_BlockSignature_Light :: Property
+-- golden_BlockSignature_Light = goldenTestBi bsl "test/golden/BlockSignature_Light"
+--   where bsl = undefined :: BlockSignature
+-- TODO ^ sig has type `ProxySigLight MainToSign`
+
+-- golden_BlockSignature_Heavy :: Property
+-- golden_BlockSignature_Heavy = goldenTestBi bsl "test/golden/BlockSignature_Heavy"
+--   where bsl = undefined :: BlockSignature
+-- TODO ^ sig has type `ProxySigLight MainToSign`
+
+-- ^ these all require MainToSign's to sign
 
 roundTripBlockSignatureBi :: Property
 roundTripBlockSignatureBi = eachOf 10 (feedPMC genBlockSignature) roundTripsBiBuildable
 
+-- GenesisBlockHeader
+golden_GenesisBlockHeader :: Property
+golden_GenesisBlockHeader = goldenTestBi exampleGenesisBlockHeader
+                                         "test/golden/GenesisBlockHeader"
+
 roundTripGenesisBlockHeaderBi :: Property
 roundTripGenesisBlockHeaderBi = eachOf 1000 (feedPM genGenesisBlockHeader) roundTripsBiBuildable
 
+-- GenesisBody
+golden_GenesisBody :: Property
+golden_GenesisBody = goldenTestBi exampleGenesisBody "test/golden/GenesisBody"
+
 roundTripGenesisBodyBi :: Property
 roundTripGenesisBodyBi = eachOf 1000 genGenesisBody roundTripsBiShow
+
+-- GenesisConsensusData
+golden_GenesisConsensusData :: Property
+golden_GenesisConsensusData = goldenTestBi cd "test/golden/GenesisConsensusData"
+  where cd = GenesisConsensusData exampleEpochIndex exampleChainDifficulty
 
 roundTripGenesisConsensusDataBi :: Property
 roundTripGenesisConsensusDataBi = eachOf 1000 genGenesisConsensusData roundTripsBiShow
@@ -160,12 +187,12 @@ roundTripGenesisConsensusDataBi = eachOf 1000 genGenesisConsensusData roundTrips
 
 -- HeaderHash
 golden_HeaderHash :: Property
-golden_HeaderHash = goldenTestBi hh "test/golden/HeaderHash"
-  where hh = coerce (hash ("HeaderHash" :: Text)) :: HeaderHash
+golden_HeaderHash = goldenTestBi exampleHeaderHash "test/golden/HeaderHash"
 
 roundTripHeaderHashBi :: Property
 roundTripHeaderHashBi = eachOf 1000 genHeaderHash roundTripsBiBuildable
 
+-- GenesisProof
 golden_GenesisProof :: Property
 golden_GenesisProof = goldenTestBi gp "test/golden/GenesisProof"
   where gp = GenesisProof (abstractHash exampleSlotLeaders)
@@ -173,27 +200,58 @@ golden_GenesisProof = goldenTestBi gp "test/golden/GenesisProof"
 roundTripGenesisProofBi :: Property
 roundTripGenesisProofBi = eachOf 1000 genGenesisProof roundTripsBiBuildable
 
+-- -- MainBlockHeader
+-- golden_MainBlockHeader :: Property
+-- golden_MainBlockHeader = goldenTestBi exampleMainBlockHeader "test/golden/MainBlockHeader"
+
 roundTripMainBlockHeaderBi :: Property
 roundTripMainBlockHeaderBi = eachOf 20 (feedPMC genMainBlockHeader) roundTripsBiBuildable
+
+-- -- MainBody
+-- golden_MainBody :: Property
+-- golden_MainBody = goldenTestBi exampleMainBody "test/golden/MainBody"
 
 roundTripMainBodyBi :: Property
 roundTripMainBodyBi = eachOf 20 (feedPM genMainBody) roundTripsBiShow
 
+-- -- MainConsensusData
+-- golden_MainConsensusData :: Property
+-- golden_MainConsensusData = goldenTestBi mcd "test/golden/MainConsensusData"
+--   where mcd = MainConsensusData exampleSlotId examplePublicKey
+--                                 exampleChainDifficulty exampleBlockSignature
+
 roundTripMainConsensusData :: Property
 roundTripMainConsensusData = eachOf 20 (feedPMC genMainConsensusData) roundTripsBiShow
+
+-- MainExtraBodyData
+golden_MainExtraBodyData :: Property
+golden_MainExtraBodyData = goldenTestBi mebd "test/golden/MainExtraBodyData"
+  where mebd = MainExtraBodyData (mkAttributes ())
 
 roundTripMainExtraBodyDataBi :: Property
 roundTripMainExtraBodyDataBi = eachOf 1000 genMainExtraBodyData roundTripsBiBuildable
 
+-- MainExtraHeaderData
+golden_MainExtraHeaderData :: Property
+golden_MainExtraHeaderData = goldenTestBi exampleMainExtraHeaderData
+                                          "test/golden/MainExtraHeaderData"
+
 roundTripMainExtraHeaderDataBi :: Property
 roundTripMainExtraHeaderDataBi = eachOf 1000 genMainExtraHeaderData roundTripsBiBuildable
+
+-- MainProof
+-- golden_MainProof :: Property
+-- golden_MainProof = goldenTestBi exampleMainProof "test/golden/MainProof"
 
 roundTripMainProofBi :: Property
 roundTripMainProofBi = eachOf 20 (feedPM genMainProof) roundTripsBiBuildable
 
+-- MainToSign
+-- golden_MainToSign :: Property
+-- golden_MainToSign = goldenTestBi exampleMainToSign "test/golden/MainToSign"
+
 roundTripMainToSignBi :: Property
 roundTripMainToSignBi = eachOf 20 (feedPMC genMainToSign) roundTripsBiShow
-
 
 -- group 1
 
@@ -574,9 +632,7 @@ roundTripAttributes = eachOf 10 (genAttributes (pure ())) roundTripsBiShow
 --------------------------------------------------------------------------------
 
 golden_BlockVersion :: Property
-golden_BlockVersion = goldenTestBi bVer "test/golden/BlockVersion"
-    where bVer = BlockVersion 1 1 1
-
+golden_BlockVersion = goldenTestBi exampleBlockVersion "test/golden/BlockVersion"
 
 roundTripBlockVersion :: Property
 roundTripBlockVersion = eachOf 10 genBlockVersion roundTripsBiBuildable
@@ -748,8 +804,7 @@ roundTripSoftforkRule = eachOf 10 genSoftforkRule roundTripsBiBuildable
 --------------------------------------------------------------------------------
 
 golden_SoftwareVersion :: Property
-golden_SoftwareVersion = goldenTestBi swV "test/golden/SoftwareVersion"
-    where swV = SoftwareVersion (ApplicationName "Golden") 99
+golden_SoftwareVersion = goldenTestBi exampleSoftwareVersion "test/golden/SoftwareVersion"
 
 roundTripSoftwareVersion :: Property
 roundTripSoftwareVersion = eachOf 10 genSoftwareVersion roundTripsBiBuildable
@@ -951,11 +1006,7 @@ roundTripTxPayload = eachOf 1000 (feedPM genTxPayload) roundTripsBiShow
 --------------------------------------------------------------------------------
 
 golden_TxProof :: Property
-golden_TxProof =  goldenTestBi txP "test/golden/TxProof"
-    where
-        txP = TxProof 32 mroot hashWit
-        mroot = mtRoot $ mkMerkleTree [(UnsafeTx txInList txOutList (mkAttributes ()))]
-        hashWit = hash $ [(V.fromList [(PkWitness examplePublicKey txSig)])]
+golden_TxProof =  goldenTestBi exampleTxProof "test/golden/TxProof"
 
 roundTripTxProof :: Property
 roundTripTxProof = eachOf 10 (genTxProof $ ProtocolMagic 0) roundTripsBiBuildable
@@ -1326,6 +1377,81 @@ staticSafeSigners = map FakeSigner (exampleSecretKeys 1 6)
 
 staticProtocolMagics :: [ProtocolMagic]
 staticProtocolMagics = map ProtocolMagic [0..5]
+
+exampleTxProof :: TxProof
+exampleTxProof = TxProof 32 mroot hashWit
+  where
+    mroot = mtRoot $ mkMerkleTree [(UnsafeTx txInList txOutList (mkAttributes ()))]
+    hashWit = hash $ [(V.fromList [(PkWitness examplePublicKey txSig)])]
+
+exampleGenesisBlockHeader :: GenesisBlockHeader
+exampleGenesisBlockHeader = mkGenesisHeader (ProtocolMagic 0)
+                                            (Left (GenesisHash prevHash))
+                                            (EpochIndex 11)
+                                            exampleGenesisBody
+  where
+    prevHash = coerce (hash ("genesisHash" :: Text)) :: Hash a
+
+-- exampleMainProof :: MainProof
+-- exampleMainProof = MainProof exampleTxProof sp (abstractHash dp) up
+--   where
+--     dp = UnsafeDlgPayload (take 4 staticProxySKHeavys)
+--     -- SscProof & UpdateProof don't have golden tests yet
+--     sp = undefined
+--     up = undefined
+
+exampleMainExtraHeaderData :: MainExtraHeaderData
+exampleMainExtraHeaderData =
+    MainExtraHeaderData exampleBlockVersion
+                        exampleSoftwareVersion
+                        (mkAttributes ())
+                        (abstractHash (MainExtraBodyData (mkAttributes ())))
+
+exampleBlockVersion :: BlockVersion
+exampleBlockVersion = BlockVersion 1 1 1
+
+exampleSoftwareVersion :: SoftwareVersion
+exampleSoftwareVersion = SoftwareVersion (ApplicationName "Golden") 99
+
+-- exampleMainBlockHeader :: MainBlockHeader
+-- exampleMainBlockHeader = mkMainHeaerExplicit (ProtocolMagic 7)
+--                                              exampleHeaderHash
+--                                              exampleChainDifficulty
+--                                              exampleSlotId
+--                                              exampleSecretKey
+--                                              pskbi
+--                                              exampleMainBody
+--                                              exampleMainExtraHeaderData
+--   where
+--     pskbi = Just (staticProxySKHeavys !! 0, examplePublicKey)
+
+exampleHeaderHash :: HeaderHash
+exampleHeaderHash = coerce (hash ("HeaderHash" :: Text))
+
+exampleChainDifficulty :: ChainDifficulty
+exampleChainDifficulty = ChainDifficulty (BlockCount 9999)
+
+exampleGenesisBody :: GenesisBody
+exampleGenesisBody = GenesisBody exampleSlotLeaders
+
+-- exampleBlockSignature :: BlockSignature
+-- exampleBlockSignature = BlockSignature (sign (ProtocolMagic 7)
+--                                              SignMainBlock
+--                                              exampleSecretKey
+--                                              exampleMainToSign)
+
+-- exampleMainBody :: MainBody
+-- exampleMainBody = MainBody exampleTxBody sp dp up
+--   where
+--     dp = UnsafeDlgPayload (take 4 staticProxySKHeavys)
+--     -- SscPayload & UpdatePayload don't have golden tests yet
+--     sp = undefined
+--     up = undefined
+
+
+-- exampleMainToSign :: MainToSign
+-- exampleMainToSign = MainToSign (abstractHash (BlockHeaderGenesis exampleGenesisBlockHeader))
+--                     exampleMainProof exampleSlotId exampleChainDifficulty exampleMainExtraHeaderData
 
 -----------------------------------------------------------------------
 -- Main test export
