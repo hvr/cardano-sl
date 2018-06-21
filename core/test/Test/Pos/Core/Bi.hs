@@ -70,7 +70,8 @@ import           Pos.Core.Update (ApplicationName (..), BlockVersion (..), Block
                                   SoftwareVersion (..), SystemTag (..), UpAttributes, UpId,
                                   UpdateData (..), UpdatePayload (..), UpdateProof,
                                   UpdateProposal (..), UpdateProposalToSign (..), UpdateProposals,
-                                  UpdateVote (..), VoteId, mkUpdateVote)
+                                  UpdateVote (..), VoteId, mkUpdateProof, mkUpdateProposalWSign,
+                                  mkUpdateVote, mkUpdateVoteSafe)
 import           Pos.Crypto (HDAddressPayload (..), Hash, PassPhrase, ProtocolMagic (..),
                              PublicKey (..), RedeemPublicKey, RedeemSignature, SecretKey (..),
                              SecretProof (..), SignTag (..), deterministicVssKeyGen, hash,
@@ -89,7 +90,7 @@ import           Pos.Crypto.Signing (EncryptedSecretKey, ProxyCert, ProxySecretK
                                      safeCreatePsk, sign, signEncoded, toPublic)
 import           Pos.Crypto.Signing.Redeem (RedeemPublicKey, RedeemSecretKey, RedeemSignature,
                                             redeemDeterministicKeyGen, redeemSign)
-import           Pos.Data.Attributes (mkAttributes)
+import           Pos.Data.Attributes (Attributes, mkAttributes)
 import           Pos.Merkle (mkMerkleTree, mtRoot)
 
 import           Serokell.Data.Memory.Units (Byte)
@@ -889,8 +890,7 @@ roundTripSscProof = eachOf 10 (genSscProof $ ProtocolMagic 0) roundTripsBiBuilda
 --------------------------------------------------------------------------------
 
 golden_SystemTag :: Property
-golden_SystemTag = goldenTestBi sysT "test/golden/SystemTag"
-    where sysT = SystemTag "golden"
+golden_SystemTag = goldenTestBi exampleSystemTag "test/golden/SystemTag"
 
 roundTripSystemTag :: Property
 roundTripSystemTag = eachOf 10 genSystemTag roundTripsBiBuildable
@@ -1093,9 +1093,7 @@ roundTripTxWitness = eachOf 10 (genTxWitness $ ProtocolMagic 0) roundTripsBiShow
 --------------------------------------------------------------------------------
 
 golden_UpAttributes :: Property
-golden_UpAttributes = goldenTestBi upA "test/golden/UpAttributes"
-    where
-        upA = mkAttributes ()
+golden_UpAttributes = goldenTestBi exampleUpAttributes "test/golden/UpAttributes"
 
 roundTripUpAttributes :: Property
 roundTripUpAttributes = eachOf 10 genUpAttributes roundTripsBiBuildable
@@ -1104,12 +1102,18 @@ roundTripUpAttributes = eachOf 10 genUpAttributes roundTripsBiBuildable
 -- UpdateData
 --------------------------------------------------------------------------------
 
+golden_UpdateData :: Property
+golden_UpdateData = goldenTestBi exampleUpdateData "test/golden/UpdateData"
+
 roundTripUpdateData :: Property
 roundTripUpdateData = eachOf 10 genUpdateData roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
 -- UpdatePayload
 --------------------------------------------------------------------------------
+
+golden_UpdatePayload :: Property
+golden_UpdatePayload = goldenTestBi exampleUpdatePayload "test/golden/UpdatePayload"
 
 roundTripUpdatePayload :: Property
 roundTripUpdatePayload = eachOf 10 (feedPM genUpdatePayload) roundTripsBiBuildable
@@ -1118,12 +1122,18 @@ roundTripUpdatePayload = eachOf 10 (feedPM genUpdatePayload) roundTripsBiBuildab
 -- UpdateProof
 --------------------------------------------------------------------------------
 
+golden_UpdateProof :: Property
+golden_UpdateProof = goldenTestBi exampleUpdateProof "test/golden/UpdateProof"
+
 roundTripUpdateProof :: Property
 roundTripUpdateProof = eachOf 10 (genUpdateProof $ ProtocolMagic 0) roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
 -- UpdateProposal
 --------------------------------------------------------------------------------
+
+golden_UpdateProposal :: Property
+golden_UpdateProposal = goldenTestBi exampleUpdateProposal "test/golden/UpdateProposal"
 
 roundTripUpdateProposal :: Property
 roundTripUpdateProposal = eachOf 10 (genUpdateProposal $ ProtocolMagic 0) roundTripsBiBuildable
@@ -1146,12 +1156,18 @@ roundTripUpdateProposalToSign = eachOf 10 genUpdateProposalToSign roundTripsBiSh
 -- UpdateVote
 --------------------------------------------------------------------------------
 
+golden_UpdateVote :: Property
+golden_UpdateVote = goldenTestBi exampleUpdateVote "test/golden/UpdateVote"
+
 roundTripUpdateVote :: Property
 roundTripUpdateVote = eachOf 10 (genUpdateVote $ ProtocolMagic 0) roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
 -- UpId
 --------------------------------------------------------------------------------
+
+golden_UpId :: Property
+golden_UpId = goldenTestBi exampleUpId "test/golden/UpId"
 
 roundTripUpId :: Property
 roundTripUpId = eachOf 10 (feedPM genUpId) roundTripsBiBuildable
@@ -1254,6 +1270,10 @@ mkGoldenTestGroup gn xs =
     group :: Group
     group = Group (fromString gn :: GroupName) (map toNamedProperty xs)
 
+-- Don't forget to try and use this throughout the codebase!!
+exampleAttributes :: Attributes ()
+exampleAttributes = mkAttributes ()
+
 exampleCommitment :: Commitment
 exampleCommitment = fst exampleCommitmentOpening
 
@@ -1293,6 +1313,9 @@ exampleOpeningsMap =
         openings = replicate mapSize exampleOpening
     in  HM.fromList $ zip stakeholderIds openings
 
+exampleSafeSigner :: Int -> SafeSigner
+exampleSafeSigner offset = staticSafeSigners!!offset
+
 exampleSharesDistribution :: SharesDistribution
 exampleSharesDistribution =
     let mapSize = 1
@@ -1309,6 +1332,49 @@ exampleStakeholderId = abstractHash examplePublicKey :: StakeholderId
 
 exampleStakeholderIds :: Int -> Int -> [StakeholderId]
 exampleStakeholderIds offset l = map abstractHash $ examplePublicKeys offset l
+
+exampleSystemTag :: SystemTag
+exampleSystemTag = SystemTag "golden"
+
+exampleUpAttributes :: UpAttributes
+exampleUpAttributes = exampleAttributes
+
+exampleUpdateData :: UpdateData
+exampleUpdateData = UpdateData h h h h
+  where
+    h = hash $ Raw "golden"
+
+exampleUpId :: UpId
+exampleUpId = hash exampleUpdateProposal
+
+exampleUpdatePayload :: UpdatePayload
+exampleUpdatePayload = UpdatePayload up uv
+  where
+    up = Just exampleUpdateProposal
+    uv = [exampleUpdateVote]
+
+exampleUpdateProof :: UpdateProof
+exampleUpdateProof = mkUpdateProof exampleUpdatePayload
+
+exampleUpdateProposal :: UpdateProposal
+exampleUpdateProposal =
+    mkUpdateProposalWSign pm bv bvm sv hm ua ss
+  where
+    pm  = ProtocolMagic 0
+    bv  = exampleBlockVersion
+    bvm = exampleBlockVersionModifier
+    sv  = exampleSoftwareVersion
+    hm  = HM.fromList [(exampleSystemTag, exampleUpdateData)]
+    ua  = exampleUpAttributes
+    ss  = exampleSafeSigner 0
+
+exampleUpdateVote :: UpdateVote
+exampleUpdateVote = mkUpdateVoteSafe pm ss ui ar
+  where
+    pm = ProtocolMagic 0
+    ss = exampleSafeSigner 0
+    ui = exampleUpId
+    ar = True
 
 exampleVssKeyPairs :: Int -> Int -> [VssKeyPair]
 exampleVssKeyPairs offset count = map (toPair . (*offset)) [0..count]
