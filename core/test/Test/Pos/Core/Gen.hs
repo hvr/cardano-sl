@@ -792,7 +792,9 @@ genTxIn :: Gen TxIn
 genTxIn = Gen.choice gens
   where
     gens = [ TxInUtxo <$> genTxId <*> genWord32
-           , TxInUnknown <$> genWord8 <*> gen32Bytes
+           -- 0 is reserved for TxInUtxo tag ----------+
+           , TxInUnknown <$> Gen.word8 (Range.constant 1 255)
+                         <*> gen32Bytes
            ]
 
 genTxInList :: Gen (NonEmpty TxIn)
