@@ -120,22 +120,20 @@ golden_BlockHeader_Genesis :: Property
 golden_BlockHeader_Genesis = goldenTestBi (BlockHeaderGenesis exampleGenesisBlockHeader)
                                           "test/golden/BlockHeader_Genesis"
 
--- golden_BlockHeaderMain :: Property
--- golden_BlockHeaderMain = goldenTestBi bhm "test/golden/BlockHeaderMain"
---   where
---     bhm = mkMainHeaderExplicit (ProtocolMagic 0) prevHash
---                                (const 5) exampleSlotId
---                                sk pske
---                                body extra
---     prevHash = coerce (hash ("genesisHash" :: Text)) :: Hash a
---     sk = exampleSecretKey
---     pske = undefined
---     body = undefined
---     extra = undefined
+-- We use `Nothing` as the ProxySKBlockInfo to avoid clashing key errors
+-- (since we use example keys which aren't related to each other)
+golden_BlockHeaderMain :: Property
+golden_BlockHeaderMain = goldenTestBi bhm "test/golden/BlockHeaderMain"
+  where
+    bhm = mkMainHeaderExplicit (ProtocolMagic 0) exampleHeaderHash
+                               exampleChainDifficulty exampleSlotId
+                               exampleSecretKey Nothing
+                               exampleMainBody exampleMainExtraHeaderData
 
 roundTripBlockHeaderBi :: Property
 roundTripBlockHeaderBi = eachOf 10 (feedPMC genBlockHeader) roundTripsBiBuildable
 
+-- BlockHeaderAttributes
 golden_BlockHeaderAttributes :: Property
 golden_BlockHeaderAttributes = goldenTestBi (mkAttributes () :: BlockHeaderAttributes)
                                             "test/golden/BlockHeaderAttributes"
@@ -143,22 +141,27 @@ golden_BlockHeaderAttributes = goldenTestBi (mkAttributes () :: BlockHeaderAttri
 roundTripBlockHeaderAttributesBi :: Property
 roundTripBlockHeaderAttributesBi = eachOf 1000 genBlockHeaderAttributes roundTripsBiBuildable
 
--- -- BlockSignature
--- golden_BlockSignature :: Property
--- golden_BlockSignature = goldenTestBi exampleBlockSignature "test/golden/BlockSignature"
--- TODO ^ sig has type `Signature MainToSign`
+-- BlockSignature
+golden_BlockSignature :: Property
+golden_BlockSignature = goldenTestBi exampleBlockSignature "test/golden/BlockSignature"
 
--- golden_BlockSignature_Light :: Property
--- golden_BlockSignature_Light = goldenTestBi bsl "test/golden/BlockSignature_Light"
---   where bsl = undefined :: BlockSignature
--- TODO ^ sig has type `ProxySigLight MainToSign`
+golden_BlockSignature_Light :: Property
+golden_BlockSignature_Light = goldenTestBi (BlockPSignatureLight sig)
+                                           "test/golden/BlockSignature_Light"
+  where
+    sig = proxySign pm SignProxySK delegateSk psk exampleMainToSign
+    [delegateSk, issuerSk] = exampleSecretKeys 5 2
+    psk = createPsk pm issuerSk (toPublic delegateSk) exampleLightDlgIndices
+    pm = ProtocolMagic 2
 
--- golden_BlockSignature_Heavy :: Property
--- golden_BlockSignature_Heavy = goldenTestBi bsl "test/golden/BlockSignature_Heavy"
---   where bsl = undefined :: BlockSignature
--- TODO ^ sig has type `ProxySigLight MainToSign`
-
--- ^ these all require MainToSign's to sign
+golden_BlockSignature_Heavy :: Property
+golden_BlockSignature_Heavy = goldenTestBi (BlockPSignatureHeavy sig)
+                                           "test/golden/BlockSignature_Heavy"
+  where
+    sig = proxySign pm SignProxySK delegateSk psk exampleMainToSign
+    [delegateSk, issuerSk] = exampleSecretKeys 5 2
+    psk = createPsk pm issuerSk (toPublic delegateSk) (staticHeavyDlgIndexes !! 0)
+    pm = ProtocolMagic 2
 
 roundTripBlockSignatureBi :: Property
 roundTripBlockSignatureBi = eachOf 10 (feedPMC genBlockSignature) roundTripsBiBuildable
@@ -205,25 +208,25 @@ golden_GenesisProof = goldenTestBi gp "test/golden/GenesisProof"
 roundTripGenesisProofBi :: Property
 roundTripGenesisProofBi = eachOf 1000 genGenesisProof roundTripsBiBuildable
 
--- -- MainBlockHeader
--- golden_MainBlockHeader :: Property
--- golden_MainBlockHeader = goldenTestBi exampleMainBlockHeader "test/golden/MainBlockHeader"
+-- MainBlockHeader
+golden_MainBlockHeader :: Property
+golden_MainBlockHeader = goldenTestBi exampleMainBlockHeader "test/golden/MainBlockHeader"
 
 roundTripMainBlockHeaderBi :: Property
 roundTripMainBlockHeaderBi = eachOf 20 (feedPMC genMainBlockHeader) roundTripsBiBuildable
 
--- -- MainBody
--- golden_MainBody :: Property
--- golden_MainBody = goldenTestBi exampleMainBody "test/golden/MainBody"
+-- MainBody
+golden_MainBody :: Property
+golden_MainBody = goldenTestBi exampleMainBody "test/golden/MainBody"
 
 roundTripMainBodyBi :: Property
 roundTripMainBodyBi = eachOf 20 (feedPM genMainBody) roundTripsBiShow
 
--- -- MainConsensusData
--- golden_MainConsensusData :: Property
--- golden_MainConsensusData = goldenTestBi mcd "test/golden/MainConsensusData"
---   where mcd = MainConsensusData exampleSlotId examplePublicKey
---                                 exampleChainDifficulty exampleBlockSignature
+-- MainConsensusData
+golden_MainConsensusData :: Property
+golden_MainConsensusData = goldenTestBi mcd "test/golden/MainConsensusData"
+  where mcd = MainConsensusData exampleSlotId examplePublicKey
+                                exampleChainDifficulty exampleBlockSignature
 
 roundTripMainConsensusData :: Property
 roundTripMainConsensusData = eachOf 20 (feedPMC genMainConsensusData) roundTripsBiShow
@@ -245,26 +248,25 @@ roundTripMainExtraHeaderDataBi :: Property
 roundTripMainExtraHeaderDataBi = eachOf 1000 genMainExtraHeaderData roundTripsBiBuildable
 
 -- MainProof
--- golden_MainProof :: Property
--- golden_MainProof = goldenTestBi exampleMainProof "test/golden/MainProof"
+golden_MainProof :: Property
+golden_MainProof = goldenTestBi exampleMainProof "test/golden/MainProof"
 
 roundTripMainProofBi :: Property
 roundTripMainProofBi = eachOf 20 (feedPM genMainProof) roundTripsBiBuildable
 
 -- MainToSign
--- golden_MainToSign :: Property
--- golden_MainToSign = goldenTestBi exampleMainToSign "test/golden/MainToSign"
+golden_MainToSign :: Property
+golden_MainToSign = goldenTestBi exampleMainToSign "test/golden/MainToSign"
 
 roundTripMainToSignBi :: Property
 roundTripMainToSignBi = eachOf 20 (feedPMC genMainToSign) roundTripsBiShow
-
--- group 1
 
 -- TODO mhueschen grok why this doesn't have a Bi instance, but (Attributes AddrAttributes) does
 -- ^ see module Pos.Core.Common.AddrAttributes
 -- roundTripAddrAttributesBi :: Property
 -- roundTripAddrAttributesBi = eachOf 1000 genAddrAttributes roundTripsBiBuildable
 
+-- Address
 golden_Address :: Property
 golden_Address = goldenTestBi a "test/golden/Address"
   where
@@ -491,8 +493,8 @@ roundTripHeavyDlgIndexBi = eachOf 1000 genHeavyDlgIndex roundTripsBiBuildable
 
 -- LightDlgIndices
 golden_LightDlgIndices :: Property
-golden_LightDlgIndices = goldenTestBi ldi "test/golden/LightDlgIndices"
-  where ldi = LightDlgIndices (EpochIndex 7, EpochIndex 88)
+golden_LightDlgIndices = goldenTestBi exampleLightDlgIndices
+                                      "test/golden/LightDlgIndices"
 
 roundTripLightDlgIndicesBi :: Property
 roundTripLightDlgIndicesBi = eachOf 1000 genLightDlgIndices roundTripsBiBuildable
@@ -503,8 +505,8 @@ golden_ProxySKBlockInfo_Nothing = goldenTestBi pskbi "test/golden/ProxySKBlockIn
   where pskbi = Nothing :: ProxySKBlockInfo
 
 golden_ProxySKBlockInfo_Just :: Property
-golden_ProxySKBlockInfo_Just = goldenTestBi pskbi "test/golden/ProxySKBlockInfo_Just"
-  where pskbi = Just (staticProxySKHeavys !! 0, examplePublicKey) :: ProxySKBlockInfo
+golden_ProxySKBlockInfo_Just = goldenTestBi exampleProxySKBlockInfo
+                                            "test/golden/ProxySKBlockInfo_Just"
 
 roundTripProxySKBlockInfoBi :: Property
 roundTripProxySKBlockInfoBi = eachOf 200 (feedPM genProxySKBlockInfo) roundTripsBiShow
@@ -837,10 +839,7 @@ golden_SscPayload_OpeningsPayload =
 
 golden_SscPayload_SharesPayload :: Property
 golden_SscPayload_SharesPayload =
-    goldenTestBi sP "test/golden/SscPayload_SharesPayload"
-  where
-    sP = SharesPayload exampleSharesMap (exampleVssCertificatesMap 10 4)
-    exampleSharesMap = HM.fromList $ [(exampleStakeholderId, exampleInnerSharesMap 3 1)]
+    goldenTestBi exampleSscPayload "test/golden/SscPayload_SharesPayload"
 
 golden_SscPayload_CertificatesPayload :: Property
 golden_SscPayload_CertificatesPayload =
@@ -858,9 +857,7 @@ roundTripSscPayload = eachOf 10 (feedPM genSscPayload) roundTripsBiBuildable
 
 golden_SscProof_CommitmentsProof :: Property
 golden_SscProof_CommitmentsProof =
-    goldenTestBi cP "test/golden/SscProof_CommitmentsProof"
-  where
-    cP = CommitmentsProof (hash exampleCommitmentsMap) (exampleVssCertificatesHash 10 4)
+    goldenTestBi exampleSscProof "test/golden/SscProof_CommitmentsProof"
 
 golden_SscProof_OpeningsProo :: Property
 golden_SscProof_OpeningsProo =
@@ -1081,9 +1078,7 @@ roundTripTxSigData = eachOf 10 genTxSigData roundTripsBiShow
 --------------------------------------------------------------------------------
 
 golden_TxWitness :: Property
-golden_TxWitness = goldenTestBi txWit "test/golden/TxWitness"
-    where
-        txWit = V.fromList [(PkWitness examplePublicKey txSig)]
+golden_TxWitness = goldenTestBi exampleTxWitness "test/golden/TxWitness"
 
 roundTripTxWitness :: Property
 roundTripTxWitness = eachOf 10 (genTxWitness $ ProtocolMagic 0) roundTripsBiShow
@@ -1597,6 +1592,14 @@ exampleTxProof = TxProof 32 mroot hashWit
     mroot = mtRoot $ mkMerkleTree [(UnsafeTx txInList txOutList (mkAttributes ()))]
     hashWit = hash $ [(V.fromList [(PkWitness examplePublicKey txSig)])]
 
+exampleTxPayload :: TxPayload
+exampleTxPayload = mkTxPayload [exampleTxAux]
+
+exampleTxAux :: TxAux
+exampleTxAux = TxAux tx exampleTxWitness
+  where
+    tx = UnsafeTx txInList txOutList (mkAttributes ())
+
 exampleGenesisBlockHeader :: GenesisBlockHeader
 exampleGenesisBlockHeader = mkGenesisHeader (ProtocolMagic 0)
                                             (Left (GenesisHash prevHash))
@@ -1605,13 +1608,11 @@ exampleGenesisBlockHeader = mkGenesisHeader (ProtocolMagic 0)
   where
     prevHash = coerce (hash ("genesisHash" :: Text)) :: Hash a
 
--- exampleMainProof :: MainProof
--- exampleMainProof = MainProof exampleTxProof sp (abstractHash dp) up
---   where
---     dp = UnsafeDlgPayload (take 4 staticProxySKHeavys)
---     -- SscProof & UpdateProof don't have golden tests yet
---     sp = undefined
---     up = undefined
+exampleMainProof :: MainProof
+exampleMainProof = MainProof exampleTxProof exampleSscProof
+                             (abstractHash dp) exampleUpdateProof
+  where
+    dp = UnsafeDlgPayload (take 4 staticProxySKHeavys)
 
 exampleMainExtraHeaderData :: MainExtraHeaderData
 exampleMainExtraHeaderData =
@@ -1626,17 +1627,17 @@ exampleBlockVersion = BlockVersion 1 1 1
 exampleSoftwareVersion :: SoftwareVersion
 exampleSoftwareVersion = SoftwareVersion (ApplicationName "Golden") 99
 
--- exampleMainBlockHeader :: MainBlockHeader
--- exampleMainBlockHeader = mkMainHeaerExplicit (ProtocolMagic 7)
---                                              exampleHeaderHash
---                                              exampleChainDifficulty
---                                              exampleSlotId
---                                              exampleSecretKey
---                                              pskbi
---                                              exampleMainBody
---                                              exampleMainExtraHeaderData
---   where
---     pskbi = Just (staticProxySKHeavys !! 0, examplePublicKey)
+-- We use `Nothing` as the ProxySKBlockInfo to avoid clashing key errors
+-- (since we use example keys which aren't related to each other)
+exampleMainBlockHeader :: MainBlockHeader
+exampleMainBlockHeader = mkMainHeaderExplicit (ProtocolMagic 7)
+                                              exampleHeaderHash
+                                              exampleChainDifficulty
+                                              exampleSlotId
+                                              exampleSecretKey
+                                              Nothing
+                                              exampleMainBody
+                                              exampleMainExtraHeaderData
 
 exampleHeaderHash :: HeaderHash
 exampleHeaderHash = coerce (hash ("HeaderHash" :: Text))
@@ -1647,24 +1648,39 @@ exampleChainDifficulty = ChainDifficulty (BlockCount 9999)
 exampleGenesisBody :: GenesisBody
 exampleGenesisBody = GenesisBody exampleSlotLeaders
 
--- exampleBlockSignature :: BlockSignature
--- exampleBlockSignature = BlockSignature (sign (ProtocolMagic 7)
---                                              SignMainBlock
---                                              exampleSecretKey
---                                              exampleMainToSign)
+exampleBlockSignature :: BlockSignature
+exampleBlockSignature = BlockSignature (sign (ProtocolMagic 7)
+                                             SignMainBlock
+                                             exampleSecretKey
+                                             exampleMainToSign)
 
--- exampleMainBody :: MainBody
--- exampleMainBody = MainBody exampleTxBody sp dp up
---   where
---     dp = UnsafeDlgPayload (take 4 staticProxySKHeavys)
---     -- SscPayload & UpdatePayload don't have golden tests yet
---     sp = undefined
---     up = undefined
+exampleMainBody :: MainBody
+exampleMainBody = MainBody exampleTxPayload exampleSscPayload
+                           dp exampleUpdatePayload
+  where
+    dp = UnsafeDlgPayload (take 4 staticProxySKHeavys)
 
+exampleMainToSign :: MainToSign
+exampleMainToSign = MainToSign (abstractHash (BlockHeaderGenesis exampleGenesisBlockHeader))
+                    exampleMainProof exampleSlotId exampleChainDifficulty exampleMainExtraHeaderData
 
--- exampleMainToSign :: MainToSign
--- exampleMainToSign = MainToSign (abstractHash (BlockHeaderGenesis exampleGenesisBlockHeader))
---                     exampleMainProof exampleSlotId exampleChainDifficulty exampleMainExtraHeaderData
+exampleSscProof :: SscProof
+exampleSscProof = CommitmentsProof (hash exampleCommitmentsMap)
+                                   (exampleVssCertificatesHash 10 4)
+
+exampleSscPayload :: SscPayload
+exampleSscPayload = SharesPayload exampleSharesMap (exampleVssCertificatesMap 10 4)
+  where
+    exampleSharesMap = HM.fromList $ [(exampleStakeholderId, exampleInnerSharesMap 3 1)]
+
+exampleTxWitness :: TxWitness
+exampleTxWitness = V.fromList [(PkWitness examplePublicKey txSig)]
+
+exampleProxySKBlockInfo :: ProxySKBlockInfo
+exampleProxySKBlockInfo = Just (staticProxySKHeavys !! 0, examplePublicKey)
+
+exampleLightDlgIndices :: LightDlgIndices
+exampleLightDlgIndices = LightDlgIndices (EpochIndex 7, EpochIndex 88)
 
 -----------------------------------------------------------------------
 -- Main test export
