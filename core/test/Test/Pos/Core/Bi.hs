@@ -5,7 +5,6 @@
 
 module Test.Pos.Core.Bi
        ( tests
-       -- , roundTripAddressBi
        ) where
 
 import           Universum
@@ -189,10 +188,6 @@ golden_GenesisConsensusData = goldenTestBi cd "test/golden/GenesisConsensusData"
 roundTripGenesisConsensusDataBi :: Property
 roundTripGenesisConsensusDataBi = eachOf 1000 genGenesisConsensusData roundTripsBiShow
 
--- GenesisHash is just a newtype around a Hash, and lacks Bi instances. The newtype is
--- unwrapped when constructing a block, so it doesn't appear anywhere and we don't need
--- to test it.
-
 -- HeaderHash
 golden_HeaderHash :: Property
 golden_HeaderHash = goldenTestBi exampleHeaderHash "test/golden/HeaderHash"
@@ -260,11 +255,6 @@ golden_MainToSign = goldenTestBi exampleMainToSign "test/golden/MainToSign"
 
 roundTripMainToSignBi :: Property
 roundTripMainToSignBi = eachOf 20 (feedPMC genMainToSign) roundTripsBiShow
-
--- TODO mhueschen grok why this doesn't have a Bi instance, but (Attributes AddrAttributes) does
--- ^ see module Pos.Core.Common.AddrAttributes
--- roundTripAddrAttributesBi :: Property
--- roundTripAddrAttributesBi = eachOf 1000 genAddrAttributes roundTripsBiBuildable
 
 -- Address
 golden_Address :: Property
@@ -465,16 +455,6 @@ golden_TxSizeLinear = goldenTestBi tsl "test/golden/TxSizeLinear"
 roundTripTxSizeLinearBi :: Property
 roundTripTxSizeLinearBi = eachOf 1000 genTxSizeLinear roundTripsBiBuildable
 
--- group 2
-
--- no Bi instance
--- roundTripGenesisConfigurationBi :: Property
--- roundTripGenesisConfigurationBi = eachOf 1000 genGenesisConfiguration roundTripsBiBuildable
-
--- no Bi instance
--- roundTripCoreConfigurationBi :: Property
--- roundTripCoreConfigurationBi = eachOf 1000 genCoreConfiguration roundTripsBiBuildable
-
 -- DlgPayload
 golden_DlgPayload :: Property
 golden_DlgPayload = goldenTestBi dp "test/golden/DlgPayload"
@@ -518,38 +498,6 @@ golden_ProxySKHeavy = goldenTestBi skh "test/golden/ProxySKHeavy"
 
 roundTripProxySKHeavyBi :: Property
 roundTripProxySKHeavyBi = eachOf 200 (feedPM genProxySKHeavy) roundTripsBiBuildable
-
--- no Bi instance
--- roundTripFakeAvvmOptionsBi :: Property
--- roundTripFakeAvvmOptionsBi = eachOf 1000 genFakeAvvmOptions roundTripsBiBuildable
-
--- no Bi instance
--- roundTripGenesisAvvmBalancesBi :: Property
--- roundTripGenesisAvvmBalancesBi = eachOf 1000 genGenesisAvvmBalances roundTripsBiBuildable
-
--- no Bi instance
--- roundTripGenesisDelegationBi :: Property
--- roundTripGenesisDelegationBi = eachOf 1000 genGenesisDelegation roundTripsBiBuildable
-
--- no Bi instance
--- roundTripGenesisProtocolConstantsBi :: Property
--- roundTripGenesisProtocolConstantsBi = eachOf 1000 genGenesisProtocolConstants roundTripsBiBuildable
-
--- no Bi instance
--- roundTripGenesisSpecBi :: Property
--- roundTripGenesisSpecBi = eachOf 1000 genGenesisSpec roundTripsBiBuildable
-
--- no Bi instance
--- roundTripTestnetBalanceOptionsBi :: Property
--- roundTripTestnetBalanceOptionsBi = eachOf 1000 genTestnetBalanceOptions roundTripsBiBuildable
-
--- no Bi instance
--- roundTripVssMaxTTLBi :: Property
--- roundTripVssMaxTTLBi = eachOf 1000 genVssMaxTTL roundTripsBiBuildable
-
--- no Bi instance
--- roundTripVssMinTTLBi :: Property
--- roundTripVssMinTTLBi = eachOf 1000 genVssMinTTL roundTripsBiBuildable
 
 -- EpochIndex
 golden_EpochIndex :: Property
@@ -608,9 +556,6 @@ golden_TimeDiff = goldenTestBi td "test/golden/TimeDiff"
 
 roundTripTimeDiffBi :: Property
 roundTripTimeDiffBi = eachOf 1000 genTimeDiff roundTripsBiBuildable
-
-
--- JORDAN's TYPES
 
 --------------------------------------------------------------------------------
 -- ApplicationName
@@ -859,8 +804,8 @@ golden_SscProof_CommitmentsProof :: Property
 golden_SscProof_CommitmentsProof =
     goldenTestBi exampleSscProof "test/golden/SscProof_CommitmentsProof"
 
-golden_SscProof_OpeningsProo :: Property
-golden_SscProof_OpeningsProo =
+golden_SscProof_OpeningsProof :: Property
+golden_SscProof_OpeningsProof =
     goldenTestBi oP "test/golden/SscProof_OpeningsProof"
   where
     oP = OpeningsProof (hash exampleOpeningsMap) (exampleVssCertificatesHash 10 4)
@@ -1220,7 +1165,6 @@ roundTripVssCertificatesMap = eachOf 10 (genVssCertificatesMap $ ProtocolMagic 0
 -- Helpers
 --------------------------------------------------------------------------------
 
--- TODO move this into util package? or crypto.gen?
 feedPM :: (ProtocolMagic -> H.Gen a) -> H.Gen a
 feedPM genA = genA =<< genProtocolMagic
 
