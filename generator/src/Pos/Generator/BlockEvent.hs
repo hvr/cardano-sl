@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds      #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor  #-}
 {-# LANGUAGE RankNTypes     #-}
@@ -59,10 +60,10 @@ import qualified Prelude
 import           Serokell.Util (listJson)
 
 import           Pos.AllSecrets (AllSecrets)
+import           Pos.Binary.Class (DecoderAttrKind (..))
 import           Pos.Block.Types (Blund)
 import           Pos.Core (GenesisWStakeholders, HeaderHash, headerHash,
-                           prevBlockL)
-import           Pos.Crypto.Hashing (hashHexF)
+                           prevBlockL, headerHashHexF)
 import           Pos.Generator.Block (BlockGenParams (..), BlockTxpGenMode, MonadBlockGen,
                                       TxGenParams (..), genBlocks)
 import           Pos.GState (withClonedGState)
@@ -158,7 +159,7 @@ genBlocksInForest
     => AllSecrets
     -> GenesisWStakeholders
     -> BlockchainForest BlockDesc
-    -> RandT g m (BlockchainForest Blund)
+    -> RandT g m (BlockchainForest (Blund 'AttrNone))
 genBlocksInForest secrets bootStakeholders =
     traverse $ mapRandT withClonedGState .
     genBlocksInTree secrets bootStakeholders
@@ -168,7 +169,7 @@ genBlocksInTree
     => AllSecrets
     -> GenesisWStakeholders
     -> BlockchainTree BlockDesc
-    -> RandT g m (BlockchainTree Blund)
+    -> RandT g m (BlockchainTree (Blund 'AttrNone))
 genBlocksInTree secrets bootStakeholders blockchainTree = do
     txpSettings <- view (lensOf' @TxpGlobalSettings)
     let BlockchainTree blockDesc blockchainForest = blockchainTree
@@ -202,7 +203,7 @@ genBlocksInStructure ::
     -> GenesisWStakeholders
     -> Map Path BlockDesc
     -> t Path
-    -> RandT g m (t Blund)
+    -> RandT g m (t (Blund 'AttrNone))
 genBlocksInStructure secrets bootStakeholders annotations s = do
     let
         getAnnotation :: Path -> BlockDesc
@@ -212,10 +213,10 @@ genBlocksInStructure secrets bootStakeholders annotations s = do
         paths = toListOf (folded . to (\path -> (path, getAnnotation path))) s
         descForest :: BlockchainForest BlockDesc
         descForest = buildBlockchainForest BlockDescDefault paths
-    blockForest :: BlockchainForest Blund <-
+    blockForest :: BlockchainForest (Blund 'AttrNone) <-
         genBlocksInForest secrets bootStakeholders descForest
     let
-        getBlock :: Path -> Blund
+        getBlock :: Path -> (Blund 'AttrNone)
         getBlock path = Map.findWithDefault
             (error "genBlocksInStructure: impossible happened")
             path
@@ -241,7 +242,7 @@ data BlockEventApply' blund = BlockEventApply
 
 makeLenses ''BlockEventApply'
 
-type BlockEventApply = BlockEventApply' Blund
+type BlockEventApply = BlockEventApply' (Blund 'AttrNone)
 
 -- | The type of failure that we expect from a rollback.
 -- Extend this data type as necessary if you need to check for
@@ -262,7 +263,7 @@ data BlockEventRollback' blund = BlockEventRollback
 
 makeLenses ''BlockEventRollback'
 
-type BlockEventRollback = BlockEventRollback' Blund
+type BlockEventRollback = BlockEventRollback' (Blund 'AttrNone)
 
 newtype SnapshotId = SnapshotId Text
     deriving (Eq, Ord, IsString)
@@ -296,7 +297,7 @@ instance Buildable blund => Buildable (BlockEvent' blund) where
         BlkEvRollback ev -> bprint ("Rollback blocks: "%listJson) (getNewestFirst $ ev ^. berInput)
         BlkEvSnap s -> bprint build s
 
-type BlockEvent = BlockEvent' Blund
+type BlockEvent = BlockEvent' (Blund 'AttrNone)
 
 newtype BlockScenario' blund = BlockScenario [BlockEvent' blund]
     deriving (Show, Functor, Foldable)
@@ -304,7 +305,7 @@ newtype BlockScenario' blund = BlockScenario [BlockEvent' blund]
 instance Buildable blund => Buildable (BlockScenario' blund) where
     build (BlockScenario xs) = bprint listJson xs
 
-type BlockScenario = BlockScenario' Blund
+type BlockScenario = BlockScenario' (Blund 'AttrNone)
 
 makePrisms ''BlockScenario'
 
@@ -343,7 +344,7 @@ blkEvTip = \case
 type HhStatusMap = Map HeaderHash CheckCount
 
 hhSnapshotId :: HeaderHash -> SnapshotId
-hhSnapshotId = SnapshotId . sformat hashHexF
+hhSnapshotId = SnapshotId . sformat headerHashHexF
 
 -- | Whenever the resulting tips of apply/rollback operations coincide,
 -- add a snapshot equivalence comparison.

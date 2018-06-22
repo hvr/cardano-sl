@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DataKinds           #-}
 {-# LANGUAGE RankNTypes          #-}
 
 -- | Blockchain generation logic.
@@ -20,7 +21,8 @@ import           System.Random (RandomGen (..))
 import           System.Wlog (logWarning)
 
 import           Pos.AllSecrets (HasAllSecrets (..), unInvSecretsMap)
-import           Pos.Block.Base (mkGenesisBlock)
+import           Pos.Binary.Class (DecoderAttrKind (..))
+import           Pos.Block.Base (mkGenesisBlock')
 import           Pos.Block.Logic (VerifyBlocksContext (..), applyBlocksUnsafe, createMainBlockInternal,
                                   normalizeMempool, verifyBlocksPrefix, getVerifyBlocksContext,
                                   getVerifyBlocksContext')
@@ -74,7 +76,7 @@ foldM' combine = go
 genBlocks ::
        forall g ctx m t . (BlockTxpGenMode g ctx m, Semigroup t, Monoid t)
     => BlockGenParams
-    -> (Maybe Blund -> t)
+    -> (Maybe (Blund 'AttrNone) -> t)
     -> RandT g m t
 genBlocks params inj = do
     ctx <- lift $ mkBlockGenContext @(MempoolExt m) params
@@ -97,7 +99,7 @@ genBlocks params inj = do
 genBlocksNoApply ::
        forall g ctx m t . (BlockTxpGenMode g ctx m, Semigroup t, Monoid t)
     => BlockGenParams
-    -> (Maybe Block -> t)
+    -> (Maybe (Block 'AttrNone) -> t)
     -> RandT g m t
 genBlocksNoApply params inj = do
     ctx <- lift $ mkBlockGenContext @(MempoolExt m) params
@@ -113,9 +115,9 @@ genBlocksNoApply params inj = do
         snd <$> foldM' genOneBlock (tipHeader, mempty) [startEOS .. finishEOS]
 
     genOneBlock
-        :: (BlockHeader, t)
+        :: ((BlockHeader 'AttrNone), t)
         -> EpochOrSlot
-        -> RandT g (BlockGenMode (MempoolExt m) m) (BlockHeader, t)
+        -> RandT g (BlockGenMode (MempoolExt m) m) ((BlockHeader 'AttrNone), t)
     genOneBlock (header, t) eos = do
         genBlockNoApply eos header >>= \case
             Nothing -> error $ sformat ("genBlockNoApply: failed to generate a block: previous hash: "%shown) (headerHash header)
@@ -131,8 +133,8 @@ genBlockNoApply
        , MonadTxpLocal (BlockGenMode (MempoolExt m) m)
        )
     => EpochOrSlot
-    -> BlockHeader -- ^ previoud block header
-    -> BlockGenRandMode (MempoolExt m) g m (Maybe Block)
+    -> (BlockHeader 'AttrNone) -- ^ previoud block header
+    -> BlockGenRandMode (MempoolExt m) g m (Maybe (Block 'AttrNone))
 genBlockNoApply eos header = do
     let epoch = eos ^. epochIndexL
     lift $ unlessM ((epoch ==) <$> LrcDB.getEpoch) (lrcSingleShot epoch)
@@ -140,7 +142,7 @@ genBlockNoApply eos header = do
     leaders <- lift $ lrcActionOnEpochReason epoch "genBlock" LrcDB.getLeadersForEpoch
     case eos of
         EpochOrSlot (Left _) -> do
-            let genesisBlock = mkGenesisBlock protocolMagic (Right header) epoch leaders
+            let genesisBlock = mkGenesisBlock' protocolMagic (Right header) epoch leaders
             return $ Just $ Left genesisBlock
         EpochOrSlot (Right slot@SlotId {..}) -> withCurrentSlot slot $ do
             genPayload slot
@@ -171,7 +173,7 @@ genBlockNoApply eos header = do
     genMainBlock ::
         SlotId ->
         ProxySKBlockInfo ->
-        BlockGenMode (MempoolExt m) m Block
+        BlockGenMode (MempoolExt m) m (Block 'AttrNone)
     genMainBlock slot proxySkInfo =
         createMainBlockInternal slot proxySkInfo header >>= \case
             Left err -> throwM (BGFailedToCreate err)
@@ -187,7 +189,7 @@ genBlock ::
        , MonadTxpLocal (BlockGenMode (MempoolExt m) m)
        )
     => EpochOrSlot
-    -> BlockGenRandMode (MempoolExt m) g m (Maybe Blund)
+    -> BlockGenRandMode (MempoolExt m) g m (Maybe (Blund 'AttrNone))
 genBlock eos = do
     let epoch = eos ^. epochIndexL
     tipHeader <- lift DB.getTipHeader
@@ -203,8 +205,8 @@ genBlock eos = do
     where
     verifyAndApply
         :: VerifyBlocksContext
-        -> Block
-        -> BlockGenMode (MempoolExt m) m Blund
+        -> (Block 'AttrNone)
+        -> BlockGenMode (MempoolExt m) m (Blund 'AttrNone)
     verifyAndApply ctx block =
         verifyBlocksPrefix ctx (one block) >>= \case
             Left err -> throwM (BGCreatedInvalid err)

@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 module VerificationBench where
 
 import           Universum
@@ -6,7 +7,7 @@ import           Control.Monad.Random.Strict (evalRandT)
 import           Control.DeepSeq (force)
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
-import qualified Data.ByteString.Lazy as BSL
+import qualified Data.ByteString as BS
 import           Data.Time.Units (Microsecond, convertUnit)
 import           Formatting (sformat, shown, int, (%))
 import qualified Options.Applicative as Opts
@@ -17,10 +18,10 @@ import           System.Wlog (LoggerName (..), LoggerConfig, consoleActionB, deb
 import           Mockable.CurrentTime (realTime)
 
 import           Pos.AllSecrets (mkAllSecretsSimple)
-import           Pos.Binary.Class (Bi (..), serialize, decodeFull)
+import           Pos.Binary.Class (BiExtRep (..), DecoderAttrKind (..),EitherExtRep (..), NonEmptyExtRep (..), serialize', decodeFull', fillExtRep)
 import           Pos.Block.Error (ApplyBlocksException, VerifyBlocksException)
 import           Pos.Block.Logic.VAR (getVerifyBlocksContext', verifyAndApplyBlocks, verifyBlocksPrefix, rollbackBlocks)
-import           Pos.Core (Block)
+import           Pos.Core (Block, GenericBlock, MainBlockchain, GenesisBlockchain)
 import           Pos.Core.Common (BlockCount (..), unsafeCoinPortionFromDouble)
 import           Pos.Core.Configuration (genesisBlockVersionData, genesisData, genesisSecretKeys)
 import           Pos.Core.Genesis (FakeAvvmOptions (..), GenesisData (..), GenesisInitializer (..), TestnetBalanceOptions (..))
@@ -54,7 +55,7 @@ balance = TestnetBalanceOptions
     , tboUseHDAddresses = False
     }
 
-generateBlocks :: HasConfigurations => BlockCount -> BlockTestMode (OldestFirst NE Block)
+generateBlocks :: HasConfigurations => BlockCount -> BlockTestMode (OldestFirst NE (Block 'AttrExtRep))
 generateBlocks bCount = do
     g <- liftIO $ newStdGen
     let secretKeys =
@@ -76,7 +77,11 @@ generateBlocks bCount = do
                 , _bgpTxpGlobalSettings = txpGlobalSettings
                 })
             maybeToList
-    return $ OldestFirst $ NE.fromList bs
+    return $ OldestFirst $ NE.fromList $ map blockFillExtRep bs
+    where
+        blockFillExtRep :: Block 'AttrNone -> Block 'AttrExtRep
+        blockFillExtRep =  runEitherExtRep . fromRight (error "fillExtRep' failed") . fillExtRep . EitherExtRep
+
 
 
 data BenchArgs = BenchArgs
@@ -138,20 +143,28 @@ benchArgsParser = BenchArgs
     <*> blockCacheP
 
 -- | Write generated blocks to a file.
-writeBlocks :: FilePath -> OldestFirst NE Block -> IO ()
+writeBlocks :: FilePath -> OldestFirst NE (Block attr) -> IO ()
 writeBlocks path bs = do
-    let sbs = serialize bs
-    BSL.writeFile path sbs
+    let sbs = serialize' $ fmap (runEitherExtRep . forgetExtRep . EitherExtRep) bs
+    BS.writeFile path sbs
 
 -- | Read generated blocks from a file.
-readBlocks :: FilePath -> IO (Maybe (OldestFirst NE Block))
+readBlocks :: FilePath -> IO (Maybe (OldestFirst NE (Block 'AttrExtRep)))
 readBlocks path = do
-    sbs <- BSL.readFile path
-    case decodeFull decode label sbs of
+    sbs <- BS.readFile path
+    case decodeFull' decodeWithOffsets labelExtRep sbs
+            :: Either
+                Text
+                (NonEmptyExtRep
+                    (EitherExtRep
+                        (GenericBlock GenesisBlockchain)
+                        (GenericBlock MainBlockchain))
+                        'AttrOffsets)
+            of
         Left err -> do
             putStrLn err
             return Nothing
-        Right bs -> return (Just bs)
+        Right (NonEmptyExtRep bs) -> return (Just $ OldestFirst $ fmap (runEitherExtRep . spliceExtRep sbs) bs)
 
 main :: IO ()
 main = do
@@ -239,7 +252,7 @@ main = do
 
         validate
             :: HasConfigurations
-            => OldestFirst NE Block
+            => OldestFirst NE (Block 'AttrExtRep)
             -> BlockTestMode (Microsecond, Maybe (Either VerifyBlocksException ApplyBlocksException))
         validate blocks = do
             verStart <- realTime
@@ -251,7 +264,7 @@ main = do
 
         validateAndApply
             :: HasConfigurations
-            => OldestFirst NE Block
+            => OldestFirst NE (Block 'AttrExtRep)
             -> BlockTestMode (Microsecond, Maybe (Either VerifyBlocksException ApplyBlocksException))
         validateAndApply blocks = do
             verStart <- realTime

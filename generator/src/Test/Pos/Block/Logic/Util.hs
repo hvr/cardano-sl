@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE DataKinds           #-}
 
 -- | Utilities for block logic testing.
 
@@ -23,6 +24,7 @@ import           Test.QuickCheck.Gen (Gen (MkGen), sized)
 import           Test.QuickCheck.Monadic (PropertyM, pick)
 
 import           Pos.AllSecrets (AllSecrets, HasAllSecrets (..), allSecrets)
+import           Pos.Binary.Class (DecoderAttrKind (..))
 import           Pos.Block.Types (Blund)
 import           Pos.Core (BlockCount, GenesisData (..), HasGenesisData,
                            SlotId (..), epochIndexL, genesisData, HasProtocolConstants)
@@ -84,7 +86,7 @@ bpGenBlocks
     => Maybe BlockCount
     -> EnableTxPayload
     -> InplaceDB
-    -> PropertyM m (OldestFirst [] Blund)
+    -> PropertyM m (OldestFirst [] (Blund 'AttrNone))
 bpGenBlocks blkCnt enableTxPayload inplaceDB = do
     params <- genBlockGenParams blkCnt enableTxPayload inplaceDB
     g <- pick $ MkGen $ \qc _ -> qc
@@ -101,7 +103,7 @@ bpGenBlock
        )
     => EnableTxPayload
     -> InplaceDB
-    -> PropertyM m Blund
+    -> PropertyM m (Blund 'AttrNone)
 -- 'unsafeHead' is safe because we create exactly 1 block
 bpGenBlock =
     fmap (unsafeHead . toList) ... bpGenBlocks (Just 1)
@@ -124,7 +126,7 @@ withCurrentSlot slot = local (set btcSlotIdL $ Just slot)
 -- slot of the given blocks.
 satisfySlotCheck
     :: ( HasProtocolConstants, MonadReader BlockTestContext m)
-    => OldestFirst NE Block
+    => OldestFirst NE (Block attr)
     -> m a
     -> m a
 satisfySlotCheck (OldestFirst blocks) action =

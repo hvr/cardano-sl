@@ -38,7 +38,7 @@ import           Mockable (CurrentTime, Mockable)
 import           Serokell.Util.Text (listJson)
 import           System.Wlog (WithLogger)
 
-import           Pos.Block.Base (genesisBlock0)
+import           Pos.Block.Base (genesisBlock0')
 import           Pos.Core (Address, ChainDifficulty, HasConfiguration, Timestamp (..), difficultyL,
                            headerHash, protocolMagic, GenesisHash (..), genesisHash)
 import           Pos.Core.Block (Block, MainBlock, mainBlockSlot, mainBlockTxPayload)
@@ -139,9 +139,9 @@ getRelatedTxsByAddrs addrs = getTxsByPredicate $ any (`elem` addrs)
 
 deriveAddrHistoryBlk
     :: [Address]
-    -> (MainBlock -> Maybe Timestamp)
+    -> (MainBlock addr -> Maybe Timestamp)
     -> Map TxId TxHistoryEntry
-    -> Block
+    -> Block addr
     -> UtxoM (Map TxId TxHistoryEntry)
 deriveAddrHistoryBlk _ _ hist (Left _) = pure hist
 deriveAddrHistoryBlk addrs getTs hist (Right blk) = do
@@ -209,11 +209,11 @@ getBlockHistoryDefault
     :: forall ctx m. (HasConfiguration, TxHistoryEnv ctx m)
     => [Address] -> m (Map TxId TxHistoryEntry)
 getBlockHistoryDefault addrs = do
-    let bot      = headerHash (genesisBlock0 protocolMagic (GenesisHash genesisHash) genesisLeaders)
+    let bot      = headerHash (genesisBlock0' protocolMagic (GenesisHash genesisHash) genesisLeaders)
     sd          <- GS.getSlottingData
     systemStart <- getSystemStartM
 
-    let getBlockTimestamp :: MainBlock -> Maybe Timestamp
+    let getBlockTimestamp :: MainBlock addr -> Maybe Timestamp
         getBlockTimestamp blk =
             getSlotStartPure systemStart (blk ^. mainBlockSlot) sd
 
@@ -221,7 +221,7 @@ getBlockHistoryDefault addrs = do
 
     let foldStep ::
                (Map TxId TxHistoryEntry, UtxoModifier)
-            -> Block
+            -> Block attr
             -> (Map TxId TxHistoryEntry, UtxoModifier)
         foldStep (hist, modifier) blk =
             runUtxoM

@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 -- | Specification of 'Pos.Block.Logic.Creation' module.
 
 module Test.Pos.Block.Logic.CreationSpec
@@ -13,6 +14,7 @@ import           Test.Hspec.QuickCheck (modifyMaxSuccess, prop)
 import           Test.QuickCheck (Gen, Property, Testable, arbitrary, choose, counterexample,
                                   elements, forAll, generate, listOf, listOf1, oneof, property)
 
+import           Pos.Binary.Class (DecoderAttrKind (..))
 import           Pos.Arbitrary.Block ()
 import           Pos.Arbitrary.Delegation (genDlgPayload)
 import           Pos.Arbitrary.Ssc (commitmentMapEpochGen, vssCertificateEpochGen)
@@ -109,7 +111,7 @@ spec = withDefConfiguration $ withDefUpdateConfiguration $
     leftToCounter :: (ToString s, Testable p) => Either s a -> (a -> p) -> Property
     leftToCounter x c = either (\t -> counterexample (toString t) False) (property . c) x
 
-    emptyBlk :: (HasConfiguration, HasUpdateConfiguration, Testable p) => (Either Text MainBlock -> p) -> Property
+    emptyBlk :: (HasConfiguration, HasUpdateConfiguration, Testable p) => (Either Text (MainBlock 'AttrNone) -> p) -> Property
     emptyBlk foo =
         forAll arbitrary $ \(prevHeader, sk, slotId) ->
         foo $ producePureBlock infLimit prevHeader [] Nothing slotId def (defSscPld slotId) def sk
@@ -121,12 +123,12 @@ spec = withDefConfiguration $ withDefUpdateConfiguration $
     noSscBlock
         :: (HasConfiguration, HasUpdateConfiguration)
         => Byte
-        -> BlockHeader
+        -> (BlockHeader 'AttrNone)
         -> [TxAux]
         -> DlgPayload
         -> UpdatePayload
         -> SecretKey
-        -> Either Text MainBlock
+        -> Either Text (MainBlock 'AttrNone)
     noSscBlock limit prevHeader txs proxyCerts updatePayload sk =
         let neutralSId = SlotId 0 (unsafeMkLocalSlotIndex $ fromIntegral $ blkSecurityParam * 2)
         in producePureBlock
@@ -135,7 +137,7 @@ spec = withDefConfiguration $ withDefUpdateConfiguration $
     producePureBlock
         :: (HasConfiguration, HasUpdateConfiguration)
         => Byte
-        -> BlockHeader
+        -> (BlockHeader 'AttrNone)
         -> [TxAux]
         -> ProxySKBlockInfo
         -> SlotId
@@ -143,7 +145,7 @@ spec = withDefConfiguration $ withDefUpdateConfiguration $
         -> SscPayload
         -> UpdatePayload
         -> SecretKey
-        -> Either Text MainBlock
+        -> Either Text (MainBlock 'AttrNone)
     producePureBlock limit prev txs psk slot dlgPay sscPay usPay sk =
         createMainBlockPure limit prev psk slot sk $
         RawPayload txs sscPay dlgPay usPay
