@@ -47,8 +47,8 @@ import           Pos.Core (AddrAttributes (..), AddrSpendingData (..), AddrStake
                            SoftwareVersion (..), StakeholderId, TimeDiff (..), Timestamp (..),
                            TxFeePolicy (..), TxSizeLinear (..), VssCertificate,
                            applicationNameMaxLength, coinPortionDenominator, coinToInteger, divCoin,
-                           localSlotIndexMaxBound, localSlotIndexMinBound, makeAddress, maxCoinVal,
-                           mkCoin, mkLocalSlotIndex, mkMultiKeyDistr, mkVssCertificate,
+                           getCoin, localSlotIndexMaxBound, localSlotIndexMinBound, makeAddress,
+                           maxCoinVal, mkCoin, mkLocalSlotIndex, mkMultiKeyDistr, mkVssCertificate,
                            mkVssCertificatesMapLossy, unsafeCoinPortionFromDouble, unsafeGetCoin,
                            unsafeSubCoin)
 import           Pos.Core.Configuration (HasGenesisBlockVersionData, HasProtocolConstants,
@@ -362,7 +362,7 @@ newtype CoinPairOverflowMul = TwoCoinsM
 instance Arbitrary CoinPairOverflowMul where
     arbitrary = do
         c1 <- arbitrary
-        let integralC1 = Types.getCoin c1
+        let integralC1 = getCoin c1
             lowerBound =
                 1 + (coinToInteger $ (maxBound @Coin) `divCoin` integralC1)
             upperBound = coinToInteger (maxBound @Coin)
