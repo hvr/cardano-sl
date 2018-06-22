@@ -761,12 +761,7 @@ genTxAttributes :: Gen TxAttributes
 genTxAttributes = pure $ mkAttributes ()
 
 genTxAux :: ProtocolMagic -> Gen TxAux
-genTxAux pm = do --TxAux <$> genTx <*> (genTxWitness pm)
-    txInW <- genTxWitness pm
-    txIns <- genTxInList
-    txOuts <- genTxOutList
-    let tx = UnsafeTx txIns txOuts (mkAttributes ())
-    pure $ TxAux tx txInW
+genTxAux pm = TxAux <$> genTx <*> (genTxWitness pm)
 
 -- TODO abstract out sampleText, define others as `coerce <$>` over it
 -- TODO consider removing `coerce`s
