@@ -1082,12 +1082,22 @@ roundTripUpdateProposal = eachOf 10 (genUpdateProposal $ ProtocolMagic 0) roundT
 -- UpdateProposals
 --------------------------------------------------------------------------------
 
+golden_UpdateProposals :: Property
+golden_UpdateProposals = goldenTestBi ups "test/golden/UpdateProposals"
+  where
+    -- Need to revisit this.
+    ups = HM.fromList [(exampleUpId, exampleUpdateProposal)]
+
 roundTripUpdateProposals :: Property
 roundTripUpdateProposals = eachOf 10 (feedPM genUpdateProposals) roundTripsBiShow
 
 --------------------------------------------------------------------------------
 -- UpdateProposalToSign
 --------------------------------------------------------------------------------
+
+golden_UpdateProposalToSign :: Property
+golden_UpdateProposalToSign =
+  goldenTestBi exampleUpdateProposalToSign "test/golden/UpdateProposalToSign"
 
 roundTripUpdateProposalToSign :: Property
 roundTripUpdateProposalToSign = eachOf 10 genUpdateProposalToSign roundTripsBiShow
@@ -1306,6 +1316,17 @@ exampleUpdateProposal =
     hm  = HM.fromList [(exampleSystemTag, exampleUpdateData)]
     ua  = exampleUpAttributes
     ss  = exampleSafeSigner 0
+
+exampleUpdateProposalToSign :: UpdateProposalToSign
+exampleUpdateProposalToSign =
+    UpdateProposalToSign bv bvm sv hm ua
+  where
+    bv  = exampleBlockVersion
+    bvm = exampleBlockVersionModifier
+    sv  = exampleSoftwareVersion
+    hm  = HM.fromList [(exampleSystemTag, exampleUpdateData)]
+    ua  = exampleUpAttributes
+
 
 exampleUpdateVote :: UpdateVote
 exampleUpdateVote = mkUpdateVoteSafe pm ss ui ar
