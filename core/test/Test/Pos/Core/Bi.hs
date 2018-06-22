@@ -630,7 +630,7 @@ golden_CommitmentsMap =
   goldenTestBi exampleCommitmentsMap "test/golden/CommitmentsMap"
 
 roundTripCommitmentsMap :: Property
-roundTripCommitmentsMap = eachOf 10 (genCommitmentsMap $ ProtocolMagic 0) roundTripsBiShow
+roundTripCommitmentsMap = eachOf 10 (feedPM genCommitmentsMap) roundTripsBiShow
 
 --------------------------------------------------------------------------------
 -- CommitmentsSignature
@@ -641,7 +641,7 @@ golden_CommitmentSignature =
     goldenTestBi exampleCommitmentSignature "test/golden/CommitmentSignature"
 
 roundTripCommitmentSignature :: Property
-roundTripCommitmentSignature = eachOf 10 (genCommitmentSignature $ ProtocolMagic 0) roundTripsBiBuildable
+roundTripCommitmentSignature = eachOf 10 (feedPM genCommitmentSignature) roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
 -- HashRaw
@@ -718,7 +718,7 @@ golden_SignedCommitment =
 
 roundTripSignedCommitment :: Property
 roundTripSignedCommitment =
-    eachOf 10 (genSignedCommitment $ ProtocolMagic 0) roundTripsBiShow
+    eachOf 10 (feedPM genSignedCommitment) roundTripsBiShow
 
 --------------------------------------------------------------------------------
 -- SharesDistribution
@@ -825,7 +825,7 @@ golden_SscProof_CertificatesProof =
     shP = CertificatesProof (exampleVssCertificatesHash 10 4)
 
 roundTripSscProof :: Property
-roundTripSscProof = eachOf 10 (genSscProof $ ProtocolMagic 0) roundTripsBiBuildable
+roundTripSscProof = eachOf 10 (feedPM genSscProof) roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
 -- SystemTag
@@ -943,7 +943,7 @@ golden_TxInWitness = mkGoldenTestGroup "TxInWitness" witnesses
                 ]
 
 roundTripTxInWitness :: Property
-roundTripTxInWitness = eachOf 10 (genTxInWitness $ ProtocolMagic 0) roundTripsBiBuildable
+roundTripTxInWitness = eachOf 10 (feedPM genTxInWitness) roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
 -- TxOutList
@@ -993,7 +993,7 @@ golden_TxProof :: Property
 golden_TxProof =  goldenTestBi exampleTxProof "test/golden/TxProof"
 
 roundTripTxProof :: Property
-roundTripTxProof = eachOf 10 (genTxProof $ ProtocolMagic 0) roundTripsBiBuildable
+roundTripTxProof = eachOf 10 (feedPM genTxProof) roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
 -- TxSig
@@ -1006,7 +1006,7 @@ golden_TxSig = goldenTestBi txSigGold "test/golden/TxSig"
                          exampleSecretKey txSigData
 
 roundTripTxSig :: Property
-roundTripTxSig = eachOf 10 (genTxSig $ ProtocolMagic 0) roundTripsBiBuildable
+roundTripTxSig = eachOf 10 (feedPM genTxSig) roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
 -- TxSigData
@@ -1026,7 +1026,7 @@ golden_TxWitness :: Property
 golden_TxWitness = goldenTestBi exampleTxWitness "test/golden/TxWitness"
 
 roundTripTxWitness :: Property
-roundTripTxWitness = eachOf 10 (genTxWitness $ ProtocolMagic 0) roundTripsBiShow
+roundTripTxWitness = eachOf 10 (feedPM genTxWitness) roundTripsBiShow
 
 --------------------------------------------------------------------------------
 -- UpAttributes
@@ -1066,7 +1066,7 @@ golden_UpdateProof :: Property
 golden_UpdateProof = goldenTestBi exampleUpdateProof "test/golden/UpdateProof"
 
 roundTripUpdateProof :: Property
-roundTripUpdateProof = eachOf 10 (genUpdateProof $ ProtocolMagic 0) roundTripsBiBuildable
+roundTripUpdateProof = eachOf 10 (feedPM genUpdateProof) roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
 -- UpdateProposal
@@ -1076,7 +1076,7 @@ golden_UpdateProposal :: Property
 golden_UpdateProposal = goldenTestBi exampleUpdateProposal "test/golden/UpdateProposal"
 
 roundTripUpdateProposal :: Property
-roundTripUpdateProposal = eachOf 10 (genUpdateProposal $ ProtocolMagic 0) roundTripsBiBuildable
+roundTripUpdateProposal = eachOf 10 (feedPM genUpdateProposal) roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
 -- UpdateProposals
@@ -1110,7 +1110,7 @@ golden_UpdateVote :: Property
 golden_UpdateVote = goldenTestBi exampleUpdateVote "test/golden/UpdateVote"
 
 roundTripUpdateVote :: Property
-roundTripUpdateVote = eachOf 10 (genUpdateVote $ ProtocolMagic 0) roundTripsBiBuildable
+roundTripUpdateVote = eachOf 10 (feedPM genUpdateVote) roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
 -- UpId
@@ -1149,7 +1149,7 @@ golden_VssCertificate :: Property
 golden_VssCertificate = goldenTestBi exampleVssCertificate "test/golden/VssCertificate"
 
 roundTripVssCertificate :: Property
-roundTripVssCertificate = eachOf 10 (genVssCertificate $ ProtocolMagic 0) roundTripsBiBuildable
+roundTripVssCertificate = eachOf 10 (feedPM genVssCertificate) roundTripsBiBuildable
 
 --------------------------------------------------------------------------------
 -- VssCertificatesHash
@@ -1169,7 +1169,7 @@ golden_VssCertificatesMap :: Property
 golden_VssCertificatesMap = goldenTestBi (exampleVssCertificatesMap 10 4) "test/golden/VssCertificatesMap"
 
 roundTripVssCertificatesMap :: Property
-roundTripVssCertificatesMap = eachOf 10 (genVssCertificatesMap $ ProtocolMagic 0) roundTripsBiShow
+roundTripVssCertificatesMap = eachOf 10 (feedPM genVssCertificatesMap) roundTripsBiShow
 
 --------------------------------------------------------------------------------
 -- Helpers
